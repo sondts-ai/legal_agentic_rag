@@ -1,0 +1,23 @@
+dataset:
+  name: "th1nhng0/vietnamese-legal-documents"
+  configs:
+    metadata: "metadata"
+    content: "content"
+    relationships: "relationships"
+  sample_size: null
+
+path:
+  data_raw: "data/raw"
+
+chunking:
+  chunk_size: 1000
+  chunk_overlap: 200
+  clean_workers: 8
+  # Vietnamese legal markers used for article-aware splitting
+  separators:
+    - "\nĐiều "
+    - "\nKhoản "
+    - "\nĐiểm "
+    - "\n\n"
+    - "\n"
+    - " "
