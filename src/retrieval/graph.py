@@ -6,7 +6,7 @@ from pathlib import Path
 import networkx as nx
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from dense import dense_search
+from src.retrieval.dense import dense_search
 
 
 _EDGE_TYPES = {

@@ -18,17 +18,17 @@ class Config:
         )
 
 
-def build_splitter(config):
+def build_splitter():
     return RecursiveCharacterTextSplitter(
-        chunk_size=config.chunking.chunk_size,
-        chunk_overlap=config.chunking.chunk_overlap,
-        separators=config.chunking.separators,
+        chunk_size=1000,
+        chunk_overlap=200,
+        separators=["\nĐiều ", "\nKhoản ", "\nĐiểm ", "\n\n", "\n", " "],
         keep_separator=True,
     )
 
 
 def chunk_documents(docs, config):
-    splitter = build_splitter(config)
+    splitter = build_splitter()
 
     chunks = []
 

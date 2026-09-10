@@ -1,7 +1,7 @@
 import json
-import os
+from logging import config
 import chromadb
-
+import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -9,8 +9,20 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from tqdm import tqdm
 
+from src.indexing import embeddings
 from src.indexing.embeddings import VLLMEmbedding
 
+def get_store() -> Chroma:
+    """Return a Chroma instance backed by the HTTP server."""
+    client = chromadb.HttpClient(
+        host="localhost",
+        port=8000,
+    )
+    return Chroma(
+        client=client,
+        collection_name="legal_documents",
+        embedding_function=embeddings,
+    )
 
 def upsert_documents(
     store: Chroma,
@@ -103,16 +115,7 @@ def build_store_from_chunks(
     )
 
     # Kết nối Chroma Server
-    client = chromadb.HttpClient(
-        host="localhost",
-        port=8000,
-    )
-
-    store = Chroma(
-        client=client,
-        collection_name="legal_documents",
-        embedding_function=embeddings,
-    )
+    store = get_store()
 
     upsert_documents(
         store=store,

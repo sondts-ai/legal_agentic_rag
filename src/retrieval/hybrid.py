@@ -3,8 +3,8 @@ from __future__ import annotations
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from src.indexing.bm25_index import BM25Index
-from bm25  import bm25_search
-from dense import dense_search
+from src.retrieval.bm25  import bm25_search
+from src.retrieval.dense import dense_search
 
 def _rrf_score(rank:int,k:int=60)->float:
     return 1.0/(k+rank+1)
