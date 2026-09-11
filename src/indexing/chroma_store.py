@@ -9,19 +9,26 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from tqdm import tqdm
 
-from src.indexing import embeddings
 from src.indexing.embeddings import VLLMEmbedding
 
 def get_store() -> Chroma:
     """Return a Chroma instance backed by the HTTP server."""
+
     client = chromadb.HttpClient(
         host="localhost",
         port=8000,
     )
+
+    embedding_function = VLLMEmbedding(
+        api_key=os.getenv("HF_TOKEN"),
+        base_url="http://localhost:8080/v1",
+        model="intfloat/multilingual-e5-small",
+    )
+
     return Chroma(
         client=client,
         collection_name="legal_documents",
-        embedding_function=embeddings,
+        embedding_function=embedding_function,
     )
 
 def upsert_documents(

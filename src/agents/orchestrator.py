@@ -38,19 +38,31 @@ _store = InMemoryStore()
 _checkpointer = MemorySaver()
 _backend = CompositeBackend(
     default=StateBackend(),
-    routes={"/results/": StoreBackend(store=_store)},
+    routes={
+        "/results/": StoreBackend(
+            store=_store,
+            namespace=lambda _rt: ("results",),
+        )
+    },
 )
 
 def build_agent():
     return create_deep_agent(
         name="vn-legal-rag",
-        model=get_llm(),
+        model=get_llm(
+            provider="vllm",
+            model="intfloat/multilingual-e5-small",
+            api_key="EMPTY",
+            base_url="http://localhost:8080/v1",
+        ),
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
-        subagents=[SubAgent(**INGESTION_AGENT_CONFIG), SubAgent(**RAG_AGENT_CONFIG)],
+        subagents=[
+            SubAgent(**INGESTION_AGENT_CONFIG),
+            SubAgent(**RAG_AGENT_CONFIG),
+        ],
         backend=_backend,
         store=_store,
         checkpointer=_checkpointer,
         skills=["./skills/"],
     )
-
 agent=build_agent()

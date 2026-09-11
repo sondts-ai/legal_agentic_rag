@@ -1,14 +1,12 @@
 """Ingestion subagent config — handles dataset download, cleaning, chunking, and indexing."""
 from __future__ import annotations
+import os
+from src.tools.ingestion_tools import create_ingestion_tools
 
-from src.tools.ingestion_tools import (
-    build_bm25_tool,
-    build_chroma_tool,
-    build_graph_tool,
-    chunk_docs_tool,
-    clean_docs_tool,
-    load_dataset_tool,
-    load_relationships_tool,
+ingestion_tools = create_ingestion_tools(
+    dataset_name="th1nhng0/vietnamese-legal-documents",
+    data_raw="data/raw",
+    token=os.getenv("HF_TOKEN"),
 )
 
 INGESTION_SYSTEM_PROMPT = """You are the Ingestion Agent for the Vietnamese Legal RAG system.
@@ -35,13 +33,5 @@ INGESTION_AGENT_CONFIG = {
         "and build Chroma + BM25 + NetworkX graph indexes"
     ),
     "system_prompt": INGESTION_SYSTEM_PROMPT,
-    "tools": [
-        load_dataset_tool,
-        load_relationships_tool,
-        clean_docs_tool,
-        chunk_docs_tool,
-        build_chroma_tool,
-        build_bm25_tool,
-        build_graph_tool,
-    ],
+    "tools": ingestion_tools,
 }

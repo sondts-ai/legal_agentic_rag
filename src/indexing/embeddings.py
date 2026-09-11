@@ -1,18 +1,22 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
 class VLLMEmbedding:
     def __init__(
         self,
-        api_key: str,
+        api_key: str ,
         base_url: str,
         model: str,
         batch_size: int = 32,
         workers: int = 4,
     ):
         self.client = OpenAI(
-            api_key=api_key,
+            api_key=api_key or os.getenv("HF_TOKEN"),
             base_url=base_url,
         )
         self.model = model
