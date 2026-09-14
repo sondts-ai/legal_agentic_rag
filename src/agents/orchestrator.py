@@ -1,9 +1,11 @@
 from __future__ import annotations
+import os
 
 from deepagents import create_deep_agent, SubAgent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
+from torchgen import model
 from src.agents.ingestion_agent import INGESTION_AGENT_CONFIG
 from src.agents.rag_agent import RAG_AGENT_CONFIG
 from src.llm import get_llm
@@ -50,10 +52,10 @@ def build_agent():
     return create_deep_agent(
         name="vn-legal-rag",
         model=get_llm(
-            provider="vllm",
-            model="intfloat/multilingual-e5-small",
-            api_key="EMPTY",
-            base_url="http://localhost:8080/v1",
+            provider=os.getenv("LLM_PROVIDER"),
+            model=os.getenv("LLM_MODEL"),
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            base_url=os.getenv("LLM_BASE_URL"),
         ),
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
         subagents=[

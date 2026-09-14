@@ -37,3 +37,9 @@ class BM25Index:
         with open(path, "rb") as f:
             return pickle.load(f)
 
+
+def build_bm25_index(chunks: list[Document], save_path: str) -> BM25Index:
+    index = BM25Index(chunks)
+    index.save(save_path)
+    return index
+

@@ -25,10 +25,7 @@ class IngestRequest(BaseModel):
 def _run(sample: int, resume: bool, from_step: str | None, segment_size: int) -> None:
     global _running
     try:
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-        from scripts.ingest import run_pipeline
+        from src.scripts.ingest import run_pipeline
         run_pipeline(
             sample_size=sample if sample > 0 else None,
             resume=resume,

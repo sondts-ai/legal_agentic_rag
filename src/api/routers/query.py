@@ -125,7 +125,7 @@ async def query(request: QueryRequest) -> QueryResponse:
     try:
         answer = generate_answer_tool.invoke({
             "query": request.question,
-            "docs_json": json.dumps(docs_list, ensure_ascii=False),
+            "docs": docs_list,
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Generation error: {e}")
