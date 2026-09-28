@@ -10,58 +10,40 @@ QueryType = Literal["factual", "multi_hop", "temporal", "reasoning"]
 SAMPLE_GOLD_SET: list[dict] = [
     # Factual
     {
-        "question": "Luật Đất đai số 31/2024/QH15 có hiệu lực từ ngày nào?",
-        "expected_doc_ids": [],
-        "answer_ground_truth": "Luật Đất đai số 31/2024/QH15 có hiệu lực thi hành từ ngày 01 tháng 01 năm 2025.",
+        "question": "Luật Đầu tư công",
+        "expected_doc_ids": [
+            "134516_68",
+            "134516_74",
+            "134516_55",
+        ],
+        "answer_ground_truth": "",
         "query_type": "factual",
     },
     {
-        "question": "Bộ Lao động - Thương binh và Xã hội có chức năng gì?",
-        "expected_doc_ids": [],
-        "answer_ground_truth": "Bộ Lao động - Thương binh và Xã hội là cơ quan của Chính phủ, thực hiện chức năng quản lý nhà nước về các lĩnh vực lao động, người có công và xã hội.",
+        "question": "Kho bạc nhà nước",
+        "expected_doc_ids": [
+            "134516_34",
+            "134516_9",
+            "134516_33",
+        ],
+        "answer_ground_truth": "",
         "query_type": "factual",
     },
+
     # Multi-hop
     {
-        "question": "Nghị định nào sửa đổi Nghị định 43/2014/NĐ-CP về thi hành Luật Đất đai?",
-        "expected_doc_ids": [],
-        "answer_ground_truth": "Nghị định 01/2017/NĐ-CP sửa đổi, bổ sung một số nghị định quy định chi tiết thi hành Luật Đất đai, trong đó có Nghị định 43/2014/NĐ-CP.",
-        "query_type": "multi_hop",
-    },
-    {
-        "question": "Thông tư nào hướng dẫn thực hiện Nghị định 105/2022/NĐ-CP?",
-        "expected_doc_ids": [],
+        "question": "dự án đầu tư",
+        "expected_doc_ids": [
+            "134516_55",
+            "134516_49",
+            "134516_62",
+            "134516_68",
+            "134516_16",
+        ],
         "answer_ground_truth": "",
         "query_type": "multi_hop",
-    },
-    # Temporal
-    {
-        "question": "Những quy định về bảo hiểm xã hội nào còn hiệu lực sau năm 2023?",
-        "expected_doc_ids": [],
-        "answer_ground_truth": "",
-        "query_type": "temporal",
-    },
-    {
-        "question": "Quy định về thuế giá trị gia tăng nào được ban hành sau năm 2020?",
-        "expected_doc_ids": [],
-        "answer_ground_truth": "",
-        "query_type": "temporal",
-    },
-    # Reasoning
-    {
-        "question": "Doanh nghiệp nhỏ và vừa phải tuân theo quy định nào về thuế thu nhập doanh nghiệp?",
-        "expected_doc_ids": [],
-        "answer_ground_truth": "",
-        "query_type": "reasoning",
-    },
-    {
-        "question": "Người lao động làm việc theo hợp đồng thời vụ có quyền hưởng những chế độ bảo hiểm gì?",
-        "expected_doc_ids": [],
-        "answer_ground_truth": "",
-        "query_type": "reasoning",
     },
 ]
-
 DEFAULT_GOLD_SET_PATH = "data/gold_set.json"
 
 def load_gold_set(path: str | None = None) -> list[dict]:
