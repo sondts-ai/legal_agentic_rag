@@ -6,8 +6,12 @@ dataset:
     relationships: "relationships"
   sample_size: null
 
-path:
+paths:
   data_raw: "data/raw"
+  data_processed: "data/processed"
+  bm25_index: "data/indexes/bm25.pkl"
+  graph_index: "data/indexes/graph.pkl"
+  chroma_progress: "data/processed/chroma_progress.json"
 
 chunking:
   chunk_size: 1000
@@ -21,3 +25,50 @@ chunking:
     - "\n\n"
     - "\n"
     - " "
+
+embedding:
+  provider: "vllm"
+  model: "intfloat/multilingual-e5-small"
+  base_url: "http://localhost:8080/v1"
+  batch_size: 32
+  workers: 4
+
+retrieval:
+  k: 5          # default top-k for dense retrieval
+  bm25_k: 10    # candidates from BM25 before RRF
+  dense_k: 10   # candidates from dense before RRF
+  rrf_k: 60     # RRF constant
+  reranker_model: "BAAI/bge-reranker-v2-m3"
+  graph_max_hops: 2
+  graph_edge_types:
+    - "amended_by"
+    - "references"
+    - "replaces"
+
+chroma:
+  distance_metric: "cosine"
+  host: "localhost"
+  port: 8000
+  collection_name: "legal_documents"
+
+ingestion:
+  segment_size: 10000
+  batch_size: 100
+  upsert_workers: 4
+
+evaluation:
+  gold_set_path: "./data/eval/gold_set.json"
+  recall_k: 5
+  ndcg_k: 10
+  query_types:
+    - "factual"
+    - "multi_hop"
+    - "temporal"
+    - "reasoning"
+
+generation:
+  provider: "openrouter"
+  model: null
+  base_url: "https://openrouter.ai/api/v1"
+  temperature: 0.0
+  max_tokens: 2048
