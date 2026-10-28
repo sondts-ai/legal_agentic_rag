@@ -1,13 +1,19 @@
 from __future__ import annotations
+
 import os
+
 import requests
 
-BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8001")
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000").rstrip("/")
+DEFAULT_TIMEOUT = 15
 
 def health()->dict:
     """check the health of the API"""
     try:
-        r= requests.get(f"{BASE_URL}/health")
+        r = requests.get(
+            f"{BASE_URL}/health",
+            timeout=DEFAULT_TIMEOUT,
+        )
         r.raise_for_status()
         return r.json()
     except requests.ConnectionError:

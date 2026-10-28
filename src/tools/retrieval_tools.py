@@ -1,8 +1,8 @@
 
 from functools import lru_cache
 import json
-import os
 
+from configs import get_config
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -17,10 +17,6 @@ from src.retrieval.graph import load_graph, graph_search
 from src.llm import get_llm
 
 
-BM25_INDEX_PATH = "data/indexes/bm25.pkl"
-GRAPH_PATH = "data/indexes/graph.pkl"
-
-
 @lru_cache(maxsize=1)
 def _get_store() -> Chroma:
     return get_store()
@@ -28,16 +24,16 @@ def _get_store() -> Chroma:
 
 @lru_cache(maxsize=1)
 def _get_bm25() -> BM25Index:
-    return BM25Index.load(BM25_INDEX_PATH)
+    return BM25Index.load(get_config().paths.bm25_index)
 
 
 @lru_cache(maxsize=1)
 def _get_graph():
-    return load_graph(GRAPH_PATH)
+    return load_graph(get_config().paths.graph_index)
 
 
 @tool
-def dense_search_tool(query: str, k: int = 5):
+def dense_search_tool(query: str, k: int | None = None):
     """Search documents using dense retrieval."""
 
     docs = dense_search(
@@ -56,7 +52,7 @@ def dense_search_tool(query: str, k: int = 5):
 
 
 @tool
-def bm25_search_tool(query: str, k: int = 5):
+def bm25_search_tool(query: str, k: int | None = None):
     """Search documents using BM25 retrieval."""
 
     docs = bm25_search(
@@ -77,9 +73,9 @@ def bm25_search_tool(query: str, k: int = 5):
 @tool
 def hybrid_search_tool(
     query: str,
-    k: int = 5,
-    bm25_k: int = 10,
-    dense_k: int = 10,
+    k: int | None = None,
+    bm25_k: int | None = None,
+    dense_k: int | None = None,
     metadata_filter_json: str = "",
 ):
     """Search documents using hybrid dense and BM25 retrieval."""
@@ -113,7 +109,7 @@ def hybrid_search_tool(
 def rerank_tool(
     query: str,
     docs: list[dict],
-    k: int = 5,
+    k: int | None = None,
 ) -> list[dict]:
     """Rerank documents using CrossEncoder."""
 
@@ -143,9 +139,9 @@ def rerank_tool(
 @tool
 def graph_traverse_tool(
     query: str,
-    k: int = 5,
-    initial_k: int = 3,
-    max_hops: int = 2,
+    k: int | None = None,
+    initial_k: int | None = None,
+    max_hops: int | None = None,
 ) -> list[dict]:
     """Traverse the graph to find relevant documents."""
 
@@ -186,15 +182,21 @@ def generate_answer_tool(
 
     context = "\n\n".join(context_parts)
 
-    llm = llm = get_llm(
-    provider=os.getenv("LLM_PROVIDER", "openrouter"),
-    model=os.getenv("LLM_MODEL"),
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    base_url=os.getenv(
-        "LLM_BASE_URL",
-        "https://openrouter.ai/api/v1",
-    ),
-)
+    generation = get_config().generation
+    if not generation.model:
+        raise ValueError(
+            "Generation model is not configured. Set generation.model "
+            "or LLM_MODEL."
+        )
+
+    llm = get_llm(
+        provider=generation.provider,
+        model=generation.model,
+        api_key=generation.openrouter_api_key,
+        base_url=generation.base_url,
+        temperature=generation.temperature,
+        max_tokens=generation.max_tokens,
+    )
 
     messages = [
         {
@@ -217,4 +219,3 @@ def generate_answer_tool(
     response = llm.invoke(messages)
 
     return response.content
-

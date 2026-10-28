@@ -15,26 +15,17 @@ load_dotenv()
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from configs import get_config
+
+_CONFIG = get_config()
 
 # ============================================================
-# Simple paths / settings — no global config
+# Configured paths and settings
 # ============================================================
-
-DATASET_NAME = "th1nhng0/vietnamese-legal-documents"
-
-DATA_RAW = "data/raw"
-DATA_PROCESSED = "data/processed"
-
-BM25_PATH = "data/indexes/bm25.pkl"
-GRAPH_PATH = "data/indexes/graph.pkl"
-
-CHROMA_PROGRESS_PATH = "data/processed/chroma_progress.json"
-
-CLEAN_WORKERS = 1
 
 STEPS = ["load", "clean", "chunk", "chroma", "bm25", "graph"]
 
-_PROCESSED = Path(DATA_PROCESSED)
+_PROCESSED = _CONFIG.paths.data_processed
 
 
 def _skip(label: str, path: Path) -> None:
@@ -62,8 +53,7 @@ def step_load(sample_size: int | None, resume: bool) -> None:
     p.step_start("load", total=sample_size or 0)
 
     docs = load_documents(
-        dataset_name=DATASET_NAME,
-        data_raw=DATA_RAW,
+        config=_CONFIG,
         sample_size=sample_size,
     )
 
@@ -95,8 +85,7 @@ def step_load(sample_size: int | None, resume: bool) -> None:
     )
 
     rels = load_relationships(
-        dataset_name=DATASET_NAME,
-        data_raw=DATA_RAW,
+        config=_CONFIG,
         doc_ids=doc_ids,
     )
 
@@ -157,7 +146,7 @@ def step_clean(resume: bool, sample_size: int | None) -> None:
 
     cleaned = clean_documents(
         docs,
-        workers=CLEAN_WORKERS,
+        workers=_CONFIG.chunking.clean_workers,
     )
 
     out_path.write_text(
@@ -218,11 +207,9 @@ def step_chunk(resume: bool, sample_size: int | None) -> None:
         total=len(docs),
     )
 
-    # chunker hiện tại của bạn tự định nghĩa splitter,
-    # nên không cần truyền config.
     chunks = chunk_documents(
         docs,
-        config=None,
+        config=_CONFIG.chunking,
     )
 
     if sample_size:
@@ -256,7 +243,7 @@ def step_chunk(resume: bool, sample_size: int | None) -> None:
 # CHROMA
 # ============================================================
 
-def step_chroma(resume: bool, segment_size: int) -> None:
+def step_chroma(resume: bool, segment_size: int | None) -> None:
     from langchain_core.documents import Document
 
     from src.ingestion import progress as p
@@ -268,7 +255,8 @@ def step_chroma(resume: bool, segment_size: int) -> None:
 
     chunks_path = _PROCESSED / "chunks.json"
 
-    progress_path = Path(CHROMA_PROGRESS_PATH)
+    progress_path = _CONFIG.paths.chroma_progress
+    segment_size = segment_size or _CONFIG.ingestion.segment_size
 
     data = json.loads(
         chunks_path.read_text(encoding="utf-8")
@@ -334,37 +322,25 @@ def step_chroma(resume: bool, segment_size: int) -> None:
         total=total,
     )
 
-    def _on_segment(offset: int) -> None:
-        p.step_update(
-            "chroma",
-            count=offset,
-            total=total,
-        )
-
-    emb_fn = VLLMEmbedding(
-        api_key=None,
-        base_url="http://localhost:8080/v1",
-        model="intfloat/multilingual-e5-small",
-    )
-    store = get_store()
+    store = get_store(_CONFIG)
+    emb_fn = VLLMEmbedding(config=_CONFIG)
 
     upsert_documents(
         store=store,
         chunks=chunks,
         embeddings=emb_fn,
         start_offset=start_offset,
-        progress_path=str(progress_path),
+        progress_path=progress_path,
         segment_size=segment_size,
+        config=_CONFIG,
     )
 
     n = total - start_offset
-    chroma_host = "localhost"
-    chroma_port = 8000
 
     print(
         f"[chroma] indexed {n} chunks "
         f"(total {total}) → "
-        f"{chroma_host}:{chroma_port}"
+        f"{_CONFIG.chroma.host}:{_CONFIG.chroma.port}"
     )
 
     p.step_done(
@@ -384,7 +360,7 @@ def step_bm25(resume: bool) -> None:
     from src.indexing.bm25_index import build_bm25_index
 
     chunks_path = _PROCESSED / "chunks.json"
-    out_path = Path(BM25_PATH)
+    out_path = _CONFIG.paths.bm25_index
 
     if resume and out_path.exists():
         _skip("bm25", out_path)
@@ -418,7 +394,8 @@ def step_bm25(resume: bool) -> None:
 
     build_bm25_index(
         chunks,
-        save_path=str(out_path),
+        save_path=out_path,
+        config=_CONFIG,
     )
 
     print(
@@ -444,7 +421,7 @@ def step_graph(resume: bool) -> None:
         _PROCESSED / "relationships.json"
     )
 
-    out_path = Path(GRAPH_PATH)
+    out_path = _CONFIG.paths.graph_index
 
     if resume and out_path.exists():
         _skip("graph", out_path)
@@ -502,7 +479,7 @@ def run_pipeline(
     sample_size: int | None = None,
     resume: bool = False,
     from_step: str | None = None,
-    segment_size: int = 10000,
+    segment_size: int | None = None,
 ) -> None:
 
     from src.ingestion import progress as p
@@ -581,7 +558,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Ingest Vietnamese legal documents "
-            "(without global config)"
+            "using the project configuration"
         )
     )
 
@@ -612,7 +589,7 @@ def main() -> None:
     parser.add_argument(
         "--segment-size",
         type=int,
-        default=10000,
+        default=None,
         dest="segment_size",
         help="Chunks per Chroma upsert segment",
     )

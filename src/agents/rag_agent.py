@@ -13,7 +13,7 @@ from src.tools.retrieval_tools import (
 RAG_SYSTEM_PROMPT = """You are an expert legal assistant for Vietnamese law, powered by Agentic RAG.
 
 Your job is to answer legal questions accurately by retrieving relevant documents and generating
-grounded, cited answers. Follow the agentic-rag skill for the full decision process.
+grounded, cited answers. Follow the decision process below.
 
 ## Quick reference
 
@@ -61,5 +61,4 @@ RAG_AGENT_CONFIG = {
         graph_traverse_tool,
         generate_answer_tool,
     ],
-    "skills": ["./skills/"],
 }

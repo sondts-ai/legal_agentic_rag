@@ -7,6 +7,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from configs import get_config
+
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
 
 _task_lock = threading.Lock()
@@ -19,7 +21,11 @@ class IngestRequest(BaseModel):
     from_step: Literal["load", "clean", "chunk", "chroma", "bm25", "graph"] | None = Field(
         None, description="Force-restart from this step"
     )
-    segment_size: int = Field(10000, ge=100, description="Chunks per Chroma upsert segment")
+    segment_size: int = Field(
+        get_config().ingestion.segment_size,
+        ge=100,
+        description="Chunks per Chroma upsert segment",
+    )
 
 
 def _run(sample: int, resume: bool, from_step: str | None, segment_size: int) -> None:

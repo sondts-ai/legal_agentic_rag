@@ -5,6 +5,8 @@ import random
 from pathlib import Path
 from typing import Literal
 
+from configs import get_config
+
 QueryType = Literal["factual", "multi_hop", "temporal", "reasoning"]
 
 SAMPLE_GOLD_SET: list[dict] = [
@@ -44,12 +46,12 @@ SAMPLE_GOLD_SET: list[dict] = [
         "query_type": "multi_hop",
     },
 ]
-DEFAULT_GOLD_SET_PATH = "data/gold_set.json"
+DEFAULT_GOLD_SET_PATH: Path | None = None
 
-def load_gold_set(path: str | None = None) -> list[dict]:
+def load_gold_set(path: str | Path | None = None) -> list[dict]:
     """Load gold set from file, falling back to the built-in sample."""
-    
-    p = Path(path or DEFAULT_GOLD_SET_PATH)
+
+    p = Path(path) if path else get_config().evaluation.gold_set_path
 
     if p.exists():
         return json.loads(
@@ -61,10 +63,9 @@ def load_gold_set(path: str | None = None) -> list[dict]:
 
 def save_gold_set(
     entries: list[dict],
-    path: str | None = None,
+    path: str | Path | None = None,
 ) -> None:
-    
-    p = Path(path or DEFAULT_GOLD_SET_PATH)
+    p = Path(path) if path else get_config().evaluation.gold_set_path
 
     p.parent.mkdir(
         parents=True,

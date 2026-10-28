@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pickle
 from pathlib import Path
+
+from configs import RetrievalConfig
 import networkx as nx
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -49,11 +51,12 @@ def graph_search(
     store: Chroma,
     graph: nx.DiGraph,
     query: str,
-    k: int = 5,
-    initial_k: int = 3,
-    max_hops: int = 2,
+    k: int | None = None,
+    initial_k: int | None = None,
+    max_hops: int | None = None,
     edge_types: set[str] | None = None,
     trace: list | None = None,
+    config: RetrievalConfig | None = None,
 ) -> list[Document]:
     """
     1. Dense-retrieve `initial_k` seed documents.
@@ -61,7 +64,20 @@ def graph_search(
     3. Dense-retrieve chunks for each reachable doc_id.
     4. Return the top-k merged results.
     """
-    allowed = edge_types or _EDGE_TYPES
+    if config is None:
+        from configs import get_config
+
+        config = get_config().retrieval
+
+    k = config.k if k is None else k
+    initial_k = min(k, config.dense_k) if initial_k is None else initial_k
+    max_hops = config.graph_max_hops if max_hops is None else max_hops
+    allowed = edge_types or set(config.graph_edge_types)
+
+    if k <= 0 or initial_k <= 0:
+        raise ValueError("Graph retrieval k values must be greater than zero")
+    if max_hops < 0:
+        raise ValueError("Graph retrieval max_hops cannot be negative")
 
     seed_docs = dense_search(store, query, k=initial_k)
     seed_ids = {d.metadata.get("doc_id", "") for d in seed_docs}

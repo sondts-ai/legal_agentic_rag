@@ -1,13 +1,9 @@
 """Ingestion subagent config — handles dataset download, cleaning, chunking, and indexing."""
 from __future__ import annotations
-import os
+
 from src.tools.ingestion_tools import create_ingestion_tools
 
-ingestion_tools = create_ingestion_tools(
-    dataset_name="th1nhng0/vietnamese-legal-documents",
-    data_raw="data/raw",
-    token=os.getenv("HF_TOKEN"),
-)
+ingestion_tools = create_ingestion_tools()
 
 INGESTION_SYSTEM_PROMPT = """You are the Ingestion Agent for the Vietnamese Legal RAG system.
 

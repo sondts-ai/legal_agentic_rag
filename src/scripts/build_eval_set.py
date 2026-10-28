@@ -1,13 +1,14 @@
 import json
 from pathlib import Path
 
+from configs import get_config
 from src.evaluation.gold_set import SAMPLE_GOLD_SET, save_gold_set
 
 
-def main():
-    out_path = "data/gold_set.json"
+def main() -> None:
+    out_path = get_config().evaluation.gold_set_path
 
-    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     save_gold_set(SAMPLE_GOLD_SET, out_path)
 

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from configs import RetrievalConfig
 from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
 
-_DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"
 _cached: dict[str, CrossEncoder] = {}
 
 def _get_model(model_name: str) -> CrossEncoder:
@@ -14,12 +14,25 @@ def _get_model(model_name: str) -> CrossEncoder:
 def rerank(
     query: str,
     docs: list[Document],
-    k: int = 5,
-    model_name: str = _DEFAULT_MODEL,
+    k: int | None = None,
+    model_name: str | None = None,
+    config: RetrievalConfig | None = None,
 ) -> list[Document]:
     if not docs:
         return []
-    model=_get_model(model_name)
+
+    if config is None:
+        from configs import get_config
+
+        config = get_config().retrieval
+
+    k = config.k if k is None else k
+    model_name = model_name or config.reranker_model
+
+    if k <= 0:
+        raise ValueError("Reranker k must be greater than zero")
+
+    model = _get_model(model_name)
     pairs = [(query, doc.page_content) for doc in docs]
     scores = model.predict(pairs)
     ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)

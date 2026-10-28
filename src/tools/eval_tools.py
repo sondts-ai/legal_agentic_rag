@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from configs import get_config
 from langchain_core.tools import tool
 
 
@@ -9,8 +10,8 @@ from langchain_core.tools import tool
 def run_strategy_eval_tool(
     strategy: str,
     sample_n: int = 0,
-    recall_k: int = 5,
-    ndcg_k: int = 10,
+    recall_k: int | None = None,
+    ndcg_k: int | None = None,
     use_ragas: bool = False,
 ) -> str:
     """
@@ -26,11 +27,12 @@ def run_strategy_eval_tool(
     """
     from src.evaluation.benchmark import run_benchmark
 
+    evaluation = get_config().evaluation
     n = sample_n if sample_n > 0 else None
     results = run_benchmark(
         strategies=[strategy],
-        recall_k=recall_k,
-        ndcg_k=ndcg_k,
+        recall_k=recall_k if recall_k is not None else evaluation.recall_k,
+        ndcg_k=ndcg_k if ndcg_k is not None else evaluation.ndcg_k,
         sample_n=n,
         use_ragas=use_ragas,
     )
@@ -40,8 +42,8 @@ def run_strategy_eval_tool(
 @tool
 def run_full_benchmark_tool(
     sample_n: int = 0,
-    recall_k: int = 5,
-    ndcg_k: int = 10,
+    recall_k: int | None = None,
+    ndcg_k: int | None = None,
     use_ragas: bool = False,
 ) -> str:
     """
@@ -56,11 +58,12 @@ def run_full_benchmark_tool(
     """
     from src.evaluation.benchmark import run_benchmark
 
+    evaluation = get_config().evaluation
     n = sample_n if sample_n > 0 else None
     results = run_benchmark(
         strategies=["naive", "hybrid", "reranker", "graph", "agentic"],
-        recall_k=recall_k,
-        ndcg_k=ndcg_k,
+        recall_k=recall_k if recall_k is not None else evaluation.recall_k,
+        ndcg_k=ndcg_k if ndcg_k is not None else evaluation.ndcg_k,
         sample_n=n,
         use_ragas=use_ragas,
     )
@@ -68,7 +71,11 @@ def run_full_benchmark_tool(
 
 
 @tool
-def compute_recall_tool(retrieved_ids_json: str, relevant_ids_json: str, k: int = 5) -> str:
+def compute_recall_tool(
+    retrieved_ids_json: str,
+    relevant_ids_json: str,
+    k: int | None = None,
+) -> str:
     """
     Compute Recall@k for a single query.
     Args:
@@ -80,6 +87,8 @@ def compute_recall_tool(retrieved_ids_json: str, relevant_ids_json: str, k: int 
     """
     from src.evaluation.metrics import recall_at_k
 
+    if k is None:
+        k = get_config().evaluation.recall_k
     retrieved = json.loads(retrieved_ids_json)
     relevant = json.loads(relevant_ids_json)
     score = recall_at_k(retrieved, relevant, k)
@@ -87,7 +96,11 @@ def compute_recall_tool(retrieved_ids_json: str, relevant_ids_json: str, k: int 
 
 
 @tool
-def compute_ndcg_tool(retrieved_ids_json: str, relevant_ids_json: str, k: int = 10) -> str:
+def compute_ndcg_tool(
+    retrieved_ids_json: str,
+    relevant_ids_json: str,
+    k: int | None = None,
+) -> str:
     """
     Compute nDCG@k for a single query.
     Args:
@@ -99,6 +112,8 @@ def compute_ndcg_tool(retrieved_ids_json: str, relevant_ids_json: str, k: int = 
     """
     from src.evaluation.metrics import ndcg_at_k
 
+    if k is None:
+        k = get_config().evaluation.ndcg_k
     retrieved = json.loads(retrieved_ids_json)
     relevant = json.loads(relevant_ids_json)
     score = ndcg_at_k(retrieved, relevant, k)

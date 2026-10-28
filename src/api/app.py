@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from configs import get_config
 from src.api.routers import benchmark, ingest, query
 from src.api.schemas import HealthResponse
 
@@ -33,6 +34,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
+def _indexes_ready() -> bool:
+    config = get_config()
+    return (
+        config.paths.bm25_index.exists()
+        and config.paths.graph_index.exists()
+        and config.paths.chroma_progress.exists()
+    )
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="AIO Agentic RAG — Vietnamese Legal Benchmark",
@@ -57,7 +67,7 @@ def create_app() -> FastAPI:
     async def health():
         return HealthResponse(
             status="ok",
-            indexes_ready=True,
+            indexes_ready=_indexes_ready(),
         )
 
     return app

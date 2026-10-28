@@ -5,24 +5,41 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from configs import Config, get_config
 from langchain_core.documents import Document
 from langchain_core.tools import tool
 
 
 def create_ingestion_tools(
-    dataset_name: str,
-    data_raw: str,
-    data_processed: str = "data/processed",
+    config: Config | None = None,
+    dataset_name: str | None = None,
+    data_raw: str | Path | None = None,
+    data_processed: str | Path | None = None,
     token: str | None = None,
-    clean_workers: int = 1,
+    clean_workers: int | None = None,
     chunk_config=None,
-    bm25_path: str = "data/indexes/bm25.pkl",
-    graph_path: str = "data/indexes/graph.pkl",
-    chroma_progress_path: str = "progress.json",
-):
-    """Create ingestion tools without global config."""
+    bm25_path: str | Path | None = None,
+    graph_path: str | Path | None = None,
+    chroma_progress_path: str | Path | None = None,
+) -> list:
+    """Create ingestion tools using the central config by default."""
 
-    data_processed = Path(data_processed)
+    app_config = config or get_config()
+    dataset_name = dataset_name or app_config.dataset.name
+    data_raw = Path(data_raw or app_config.paths.data_raw)
+    data_processed = Path(data_processed or app_config.paths.data_processed)
+    token = token if token is not None else app_config.hf_token
+    clean_workers = (
+        clean_workers
+        if clean_workers is not None
+        else app_config.chunking.clean_workers
+    )
+    chunk_config = chunk_config or app_config.chunking
+    bm25_path = Path(bm25_path or app_config.paths.bm25_index)
+    graph_path = Path(graph_path or app_config.paths.graph_index)
+    chroma_progress_path = Path(
+        chroma_progress_path or app_config.paths.chroma_progress
+    )
 
     def load_docs(path: Path) -> list[Document]:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -154,6 +171,7 @@ def create_ingestion_tools(
         build_store_from_chunks(
             chunks,
             progress_path=chroma_progress_path,
+            config=app_config,
         )
 
         return f"Indexed {len(chunks)} chunks into Chroma"
@@ -204,4 +222,3 @@ def create_ingestion_tools(
         build_bm25_tool,
         build_graph_tool,
     ]
-

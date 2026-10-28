@@ -1,25 +1,44 @@
 from __future__ import annotations
 
+from configs import RetrievalConfig
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from src.indexing.bm25_index import BM25Index
-from src.retrieval.bm25  import bm25_search
+from src.retrieval.bm25 import bm25_search
 from src.retrieval.dense import dense_search
 
-def _rrf_score(rank:int,k:int=60)->float:
-    return 1.0/(k+rank+1)
+
+def _rrf_score(rank: int, rrf_k: int) -> float:
+    if rrf_k <= 0:
+        raise ValueError("RRF k must be greater than zero")
+    return 1.0 / (rrf_k + rank + 1)
+
 
 def hybrid_search(
     store: Chroma,
     bm25_index: BM25Index,
     query: str,
-    k: int = 5,
-    bm25_k: int = 10,
-    dense_k: int = 10,
-    rrf_k: int = 60,
+    k: int | None = None,
+    bm25_k: int | None = None,
+    dense_k: int | None = None,
+    rrf_k: int | None = None,
     metadata_filter: dict | None = None,
     trace: list | None = None,
+    config: RetrievalConfig | None = None,
 ) -> list[Document]:
+    if config is None:
+        from configs import get_config
+
+        config = get_config().retrieval
+
+    k = config.k if k is None else k
+    bm25_k = config.bm25_k if bm25_k is None else bm25_k
+    dense_k = config.dense_k if dense_k is None else dense_k
+    rrf_k = config.rrf_k if rrf_k is None else rrf_k
+
+    if k <= 0 or bm25_k <= 0 or dense_k <= 0:
+        raise ValueError("Hybrid retrieval values k must be greater than zero")
+
     bm25_results = bm25_search(bm25_index, query, k=bm25_k)
     dense_results = dense_search(store, query, k=dense_k, metadata_filter=metadata_filter)
     if trace is not None:

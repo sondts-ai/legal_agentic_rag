@@ -9,6 +9,7 @@ from typing import Callable
 
 from langchain_core.documents import Document
 
+from configs import get_config
 from src.evaluation.gold_set import load_gold_set
 from src.evaluation.metrics import (
     aggregate_metrics,
@@ -209,25 +210,18 @@ def _generate_answer(
     docs: list[Document],
 ) -> str:
     """Generate an answer from retrieved docs using the configured LLM."""
-    import json
-
     from src.tools.retrieval_tools import generate_answer_tool
-
-    docs_json = json.dumps(
-        [
-            {
-                "page_content": d.page_content,
-                "metadata": d.metadata,
-            }
-            for d in docs
-        ],
-        ensure_ascii=False,
-    )
 
     return generate_answer_tool.invoke(
         {
             "query": question,
-            "docs_json": docs_json,
+            "docs": [
+                {
+                    "page_content": d.page_content,
+                    "metadata": d.metadata,
+                }
+                for d in docs
+            ],
         }
     )
 
@@ -250,14 +244,17 @@ def run_benchmark(
     """
 
     # Gold set path is fixed for this evaluation
-    _gold_path = gold_path or "data/gold_set.json"
-    _recall_k = recall_k or 5
-    _ndcg_k = ndcg_k or 10
-    _output_dir = output_dir or "results"
+    evaluation = get_config().evaluation
+    _gold_path = gold_path or evaluation.gold_set_path
+    _recall_k = recall_k if recall_k is not None else evaluation.recall_k
+    _ndcg_k = ndcg_k if ndcg_k is not None else evaluation.ndcg_k
+    _output_dir = output_dir or evaluation.output_dir
 
     entries = load_gold_set(_gold_path)
 
-    if sample_n:
+    if sample_n is not None:
+        if sample_n < 1:
+            raise ValueError("sample_n must be greater than zero")
         entries = entries[:sample_n]
 
     selected = strategies or list(STRATEGIES.keys())
@@ -307,12 +304,14 @@ def run_benchmark(
                 time.perf_counter() - t0
             ) * 1000
 
-            # Use doc_id + chunk_index as the retrieval ID
-            retrieved_ids = [
-                f"{d.metadata.get('doc_id', '')}_"
-                f"{d.metadata.get('chunk_index', '')}"
-                for d in docs
-            ]
+            # Gold entries identify source documents, not individual chunks.
+            retrieved_ids = list(
+                dict.fromkeys(
+                    d.metadata["doc_id"]
+                    for d in docs
+                    if d.metadata.get("doc_id")
+                )
+            )
 
             per_query.append(
                 {

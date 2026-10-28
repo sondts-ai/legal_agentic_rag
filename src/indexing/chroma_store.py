@@ -1,46 +1,61 @@
 import json
-from logging import config
-import chromadb
-import os
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
+import chromadb
+from configs import Config, get_config
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from tqdm import tqdm
 
 from src.indexing.embeddings import VLLMEmbedding
 
-def get_store() -> Chroma:
-    """Return a Chroma instance backed by the HTTP server."""
+
+def get_store(config: Config | None = None) -> Chroma:
+    """Return a Chroma instance backed by the configured HTTP server."""
+    app_config = config or get_config()
+    chroma_config = app_config.chroma
+    embedding_config = app_config.embedding
 
     client = chromadb.HttpClient(
-        host="localhost",
-        port=8000,
+        host=chroma_config.host,
+        port=chroma_config.port,
     )
 
     embedding_function = VLLMEmbedding(
-        api_key=os.getenv("HF_TOKEN"),
-        base_url="http://localhost:8080/v1",
-        model="intfloat/multilingual-e5-small",
+        api_key=app_config.hf_token,
+        base_url=embedding_config.base_url,
+        model=embedding_config.model,
+        batch_size=embedding_config.batch_size,
+        workers=embedding_config.workers,
     )
 
     return Chroma(
         client=client,
-        collection_name="legal_documents",
+        collection_name=chroma_config.collection_name,
+        collection_metadata={"hnsw:space": chroma_config.distance_metric},
         embedding_function=embedding_function,
     )
+
 
 def upsert_documents(
     store: Chroma,
     chunks: list[Document],
     embeddings: VLLMEmbedding,
-    segment_size: int = 10000,
-    batch_size: int = 100,
-    upsert_workers: int = 4,
+    segment_size: int | None = None,
+    batch_size: int | None = None,
+    upsert_workers: int | None = None,
     start_offset: int = 0,
-    progress_path: str | None = None,
-):
+    progress_path: str | Path | None = None,
+    config: Config | None = None,
+) -> None:
+    app_config = config or get_config()
+    ingestion_config = app_config.ingestion
+
+    segment_size = segment_size or ingestion_config.segment_size
+    batch_size = batch_size or ingestion_config.batch_size
+    upsert_workers = upsert_workers or ingestion_config.upsert_workers
+
     total = len(chunks)
 
     for seg_start in range(start_offset, total, segment_size):
@@ -59,7 +74,7 @@ def upsert_documents(
         print(f"Embedding [{seg_start}:{seg_end}]...")
         vectors = embeddings.embed_documents(texts)
 
-        def _upsert(i: int):
+        def _upsert(i: int) -> int:
             end = min(i + batch_size, len(segment))
 
             store._collection.upsert(
@@ -78,11 +93,9 @@ def upsert_documents(
             desc=f"Upserting [{seg_start}:{seg_end}]",
             unit="chunk",
         ) as bar:
-
             with ThreadPoolExecutor(
                 max_workers=upsert_workers
             ) as executor:
-
                 futures = [
                     executor.submit(_upsert, i)
                     for i in offsets
@@ -92,44 +105,50 @@ def upsert_documents(
                     bar.update(future.result())
 
         if progress_path:
-            Path(progress_path).write_text(
+            progress = Path(progress_path)
+            progress.parent.mkdir(parents=True, exist_ok=True)
+            progress.write_text(
                 json.dumps({
                     "last_offset": seg_end,
                     "total": total,
-                })
+                }),
+                encoding="utf-8",
             )
 
 
 def build_store_from_chunks(
     chunks: list[Document],
-    progress_path: str = "progress.json",
+    progress_path: str | Path | None = None,
+    config: Config | None = None,
 ) -> Chroma:
+    app_config = config or get_config()
+    progress = Path(progress_path or app_config.paths.chroma_progress)
 
     start_offset = 0
 
-    if Path(progress_path).exists():
-        progress = json.loads(
-            Path(progress_path).read_text()
-        )
-
-        start_offset = progress["last_offset"]
+    if progress.exists():
+        progress_state = json.loads(progress.read_text(encoding="utf-8"))
+        start_offset = progress_state["last_offset"]
         print(f"Resuming from chunk {start_offset}")
 
+    embedding_config = app_config.embedding
     embeddings = VLLMEmbedding(
-        api_key=os.getenv("HF_TOKEN"),
-        base_url="http://localhost:8080/v1",
-        model="intfloat/multilingual-e5-small",
+        api_key=app_config.hf_token,
+        base_url=embedding_config.base_url,
+        model=embedding_config.model,
+        batch_size=embedding_config.batch_size,
+        workers=embedding_config.workers,
     )
 
-    # Kết nối Chroma Server
-    store = get_store()
+    store = get_store(app_config)
 
     upsert_documents(
         store=store,
         chunks=chunks,
         embeddings=embeddings,
         start_offset=start_offset,
-        progress_path=progress_path,
+        progress_path=progress,
+        config=app_config,
     )
 
     return store

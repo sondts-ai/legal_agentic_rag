@@ -1,15 +1,25 @@
-"""CLI: run strategy benchmarks against the gold QA set."""
+"""CLI: run strategy benchmarks against the configured gold QA set."""
+
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
+from configs import get_config
 
-def main():
+
+_CONFIG = get_config()
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="Run RAG strategy benchmarks")
     parser.add_argument(
         "--strategy",
@@ -18,8 +28,16 @@ def main():
         help="Which strategy to benchmark",
     )
     parser.add_argument("--sample", type=int, default=0, help="Number of gold queries (0 = all)")
-    parser.add_argument("--recall-k", type=int, default=5)
-    parser.add_argument("--ndcg-k", type=int, default=10)
+    parser.add_argument(
+        "--recall-k",
+        type=int,
+        default=_CONFIG.evaluation.recall_k,
+    )
+    parser.add_argument(
+        "--ndcg-k",
+        type=int,
+        default=_CONFIG.evaluation.ndcg_k,
+    )
     parser.add_argument(
         "--ragas",
         action="store_true",
@@ -34,6 +52,7 @@ def main():
 
     run_benchmark(
         strategies=strategies,
+        gold_path=str(_CONFIG.evaluation.gold_set_path),
         recall_k=args.recall_k,
         ndcg_k=args.ndcg_k,
         sample_n=n,

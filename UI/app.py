@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import sys
 import os
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, os.path.dirname(__file__))
 
 import matplotlib
@@ -10,6 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import gradio as gr
+from configs import get_config
 
 from api_client import (
     health,
@@ -18,6 +23,7 @@ from api_client import (
 )
 
 STRATEGIES = ["naive", "hybrid", "reranker", "graph", "agentic"]
+_CONFIG = get_config()
 _COLORS = ["#4C72B0", "#55A868", "#C44E52", "#8172B2", "#CCB974"]
 STRATEGY_COLORS = dict(zip(STRATEGIES, _COLORS))
 
@@ -85,22 +91,32 @@ def do_benchmark(strategies: list[str], sample_n: int, recall_k: int, ndcg_k: in
     if "error" in result:
         return f"Error: {result['error']}", None, None
 
-    results: dict = result["results"]
+    results: dict = result.get("results", {})
+    if not results:
+        return "Benchmark returned no results.", pd.DataFrame(), None
 
     # Results table
     rows = []
     for strat, metrics in results.items():
         rows.append({"strategy": strat, **{k: round(v, 4) for k, v in metrics.items()}})
     df = pd.DataFrame(rows)
+    if df.empty:
+        return "Benchmark returned no rows.", df, None
 
     # Bar chart
     recall_key = f"recall@{recall_k}"
     ndcg_key = f"ndcg@{ndcg_k}"
     metrics_to_plot = [m for m in [recall_key, ndcg_key, "avg_latency_ms"] if m in df.columns]
+    if not metrics_to_plot:
+        return "Benchmark completed, but no chartable metrics were returned.", df, None
 
-    fig, axes = plt.subplots(1, len(metrics_to_plot), figsize=(5 * len(metrics_to_plot), 4))
-    if len(metrics_to_plot) == 1:
-        axes = [axes]
+    fig, axes = plt.subplots(
+        1,
+        len(metrics_to_plot),
+        figsize=(5 * len(metrics_to_plot), 4),
+        squeeze=False,
+    )
+    axes = axes[0]
 
     strat_list = df["strategy"].tolist()
     colors = [STRATEGY_COLORS.get(s, "#888888") for s in strat_list]
@@ -125,9 +141,10 @@ def do_benchmark(strategies: list[str], sample_n: int, recall_k: int, ndcg_k: in
         "RAG Strategy Comparison — Vietnamese Legal Documents",
         fontsize=12, fontweight="bold",
     )
-    plt.tight_layout()
+    fig.tight_layout()
 
-    csv_note = f"Results saved → {result.get('csv_path', 'results/')}"
+    csv_path = result.get("csv_path") or str(_CONFIG.evaluation.output_dir)
+    csv_note = f"Results saved → {csv_path}"
     return csv_note, df, fig
 
 
@@ -165,7 +182,14 @@ with gr.Blocks(title="AIO Agentic RAG", theme=green_theme) as demo:
                 label="Strategy",
                 scale=2,
             )
-            k_in = gr.Slider(minimum=1, maximum=20, value=5, step=1, label="k (docs to retrieve)", scale=3)
+            k_in = gr.Slider(
+                minimum=1,
+                maximum=20,
+                value=_CONFIG.retrieval.k,
+                step=1,
+                label="k (docs to retrieve)",
+                scale=3,
+            )
 
         ask_btn = gr.Button("Ask", variant="primary")
 
@@ -217,9 +241,19 @@ with gr.Blocks(title="AIO Agentic RAG", theme=green_theme) as demo:
             label="Strategies to run",
         )
         with gr.Row():
-            sample_n_in = gr.Number(value=8, label="Sample N  (0 = all gold queries)", precision=0, minimum=0)
-            recall_k_in = gr.Number(value=5, label="recall @ k", precision=0, minimum=1)
-            ndcg_k_in = gr.Number(value=10, label="nDCG @ k", precision=0, minimum=1)
+            sample_n_in = gr.Number(value=0, label="Sample N  (0 = all gold queries)", precision=0, minimum=0)
+            recall_k_in = gr.Number(
+                value=_CONFIG.evaluation.recall_k,
+                label="recall @ k",
+                precision=0,
+                minimum=1,
+            )
+            ndcg_k_in = gr.Number(
+                value=_CONFIG.evaluation.ndcg_k,
+                label="nDCG @ k",
+                precision=0,
+                minimum=1,
+            )
 
         run_btn = gr.Button("Run Benchmark", variant="primary")
 

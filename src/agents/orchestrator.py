@@ -1,11 +1,10 @@
 from __future__ import annotations
-import os
 
 from deepagents import create_deep_agent, SubAgent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
-from torchgen import model
+from configs import get_config
 from src.agents.ingestion_agent import INGESTION_AGENT_CONFIG
 from src.agents.rag_agent import RAG_AGENT_CONFIG
 from src.llm import get_llm
@@ -49,13 +48,22 @@ _backend = CompositeBackend(
 )
 
 def build_agent():
+    generation = get_config().generation
+    if not generation.model:
+        raise ValueError(
+            "Generation model is not configured. Set generation.model "
+            "or LLM_MODEL."
+        )
+
     return create_deep_agent(
         name="vn-legal-rag",
         model=get_llm(
-            provider=os.getenv("LLM_PROVIDER"),
-            model=os.getenv("LLM_MODEL"),
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-            base_url=os.getenv("LLM_BASE_URL"),
+            provider=generation.provider,
+            model=generation.model,
+            api_key=generation.openrouter_api_key,
+            base_url=generation.base_url,
+            temperature=generation.temperature,
+            max_tokens=generation.max_tokens,
         ),
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
         subagents=[
@@ -65,6 +73,7 @@ def build_agent():
         backend=_backend,
         store=_store,
         checkpointer=_checkpointer,
-        skills=["./skills/"],
     )
-agent=build_agent()
+
+
+agent = build_agent()

@@ -41,9 +41,14 @@ retrieval:
   reranker_model: "BAAI/bge-reranker-v2-m3"
   graph_max_hops: 2
   graph_edge_types:
-    - "amended_by"
-    - "references"
-    - "replaces"
+    - "Căn cứ"
+    - "Dẫn chiếu"
+    - "Văn bản sửa đổi"
+    - "Văn bản bổ sung"
+    - "Thay thế"
+    - "Bãi bỏ"
+    - "Văn bản hết hiệu lực"
+    - "Văn bản quy định hết hiệu lực"
 
 chroma:
   distance_metric: "cosine"
@@ -58,6 +63,7 @@ ingestion:
 
 evaluation:
   gold_set_path: "./data/eval/gold_set.json"
+  output_dir: "./results"
   recall_k: 5
   ndcg_k: 10
   query_types:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from configs import Config, get_config
 from datasets import Dataset, Features, Value, load_dataset
 from huggingface_hub import snapshot_download
 from langchain_core.documents import Document
@@ -18,7 +19,7 @@ _CONTENT_FEATURES = Features({
 def _ensure_local_dataset(
     dataset_name: str, data_raw: str, token: str | None = None
 ) -> str:
-    """Download dataset locally if parquet files are not available."""
+    """Download the dataset locally if parquet files are not available."""
     local = Path(data_raw) / dataset_name.replace("/", "--")
 
     if not any(local.rglob("*.parquet")):
@@ -33,10 +34,17 @@ def _ensure_local_dataset(
     return str(local)
 
 
-def _iter_content(source: str, sample_size: int | None = None) -> list[dict]:
+def _iter_content(
+    source: str,
+    config_name: str,
+    sample_size: int | None = None,
+) -> list[dict]:
     """Load content rows from the local dataset."""
     ds = load_dataset(
-        source, "content", split="data", features=_CONTENT_FEATURES
+        source,
+        config_name,
+        split="data",
+        features=_CONTENT_FEATURES,
     )
 
     total = sample_size if sample_size else len(ds)
@@ -53,10 +61,12 @@ def _iter_content(source: str, sample_size: int | None = None) -> list[dict]:
 
 
 def _load_metadata_lookup(
-    source: str, doc_ids: set[str] | None = None
+    source: str,
+    config_name: str,
+    doc_ids: set[str] | None = None,
 ) -> dict[str, dict]:
-    """Load metadata and create an id → metadata lookup."""
-    ds: Dataset = load_dataset(source, "metadata", split="data")
+    """Load metadata and create an id-to-metadata lookup."""
+    ds: Dataset = load_dataset(source, config_name, split="data")
     remaining = set(doc_ids) if doc_ids is not None else None
     result: dict[str, dict] = {}
 
@@ -75,10 +85,12 @@ def _load_metadata_lookup(
 
 
 def _load_relationships(
-    source: str, doc_ids: set[str] | None = None
+    source: str,
+    config_name: str,
+    doc_ids: set[str] | None = None,
 ) -> list[dict]:
     """Load relationships between documents."""
-    ds: Dataset = load_dataset(source, "relationships", split="data")
+    ds = load_dataset(source, config_name, split="data")
 
     return [
         dict(row)
@@ -92,17 +104,36 @@ def _load_relationships(
 
 
 def load_documents(
-    dataset_name: str,
-    data_raw: str,
+    dataset_name: str | None = None,
+    data_raw: str | Path | None = None,
     token: str | None = None,
     sample_size: int | None = None,
+    config: Config | None = None,
 ) -> list[Document]:
-    """Load content + metadata and return LangChain Documents."""
-    source = _ensure_local_dataset(dataset_name, data_raw, token)
+    """Load content and metadata and return LangChain documents."""
+    app_config = config or get_config()
+    dataset_config = app_config.dataset
+    dataset_name = dataset_name or dataset_config.name
+    data_raw = data_raw or app_config.paths.data_raw
+    token = token if token is not None else app_config.hf_token
+    sample_size = (
+        sample_size
+        if sample_size is not None
+        else dataset_config.sample_size
+    )
 
-    content_rows = _iter_content(source, sample_size)
+    source = _ensure_local_dataset(dataset_name, str(data_raw), token)
+    content_rows = _iter_content(
+        source,
+        dataset_config.content_config,
+        sample_size,
+    )
     doc_ids = {str(row.get("id", "")) for row in content_rows}
-    metadata_lookup = _load_metadata_lookup(source, doc_ids)
+    metadata_lookup = _load_metadata_lookup(
+        source,
+        dataset_config.metadata_config,
+        doc_ids,
+    )
 
     documents = []
 
@@ -131,11 +162,22 @@ def load_documents(
 
 
 def load_relationships(
-    dataset_name: str,
-    data_raw: str,
+    dataset_name: str | None = None,
+    data_raw: str | Path | None = None,
     token: str | None = None,
     doc_ids: set[str] | None = None,
+    config: Config | None = None,
 ) -> list[dict]:
-    """Load relationships between documents."""
-    source = _ensure_local_dataset(dataset_name, data_raw, token)
-    return _load_relationships(source, doc_ids)
+    """Load document relationships from the configured dataset."""
+    app_config = config or get_config()
+    dataset_config = app_config.dataset
+    dataset_name = dataset_name or dataset_config.name
+    data_raw = data_raw or app_config.paths.data_raw
+    token = token if token is not None else app_config.hf_token
+
+    source = _ensure_local_dataset(dataset_name, str(data_raw), token)
+    return _load_relationships(
+        source,
+        dataset_config.relationships_config,
+        doc_ids,
+    )

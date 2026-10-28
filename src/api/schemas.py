@@ -1,13 +1,23 @@
 from __future__ import annotations
-from typing import Literal,Any
-from pydantic import BaseModel, Field  
+from typing import Any, Literal
 
-Strategy=Literal["naive","hybrid","reranker","graph","agentic"]
+from pydantic import BaseModel, Field
+
+from configs import get_config
+
+
+_CONFIG = get_config()
+Strategy = Literal["naive", "hybrid", "reranker", "graph", "agentic"]
 
 class QueryRequest(BaseModel):
     question: str = Field(..., description="Legal question in Vietnamese")
     strategy: Strategy = Field("hybrid", description="RAG strategy to use")
-    k: int = Field(5, ge=1, le=20, description="Number of documents to retrieve")
+    k: int = Field(
+        _CONFIG.retrieval.k,
+        ge=1,
+        le=20,
+        description="Number of documents to retrieve",
+    )
 
 class SourceDocument(BaseModel):
     doc_id:str
@@ -30,17 +40,17 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceDocument]
     latency_ms: float
-    trace: list[TraceStep] = []
+    trace: list[TraceStep] = Field(default_factory=list)
 
 
 class BenchmarkRequest(BaseModel):
     strategies: list[Strategy] = Field(
-        default=["naive", "hybrid", "reranker", "graph"],
+        default=["naive", "hybrid", "reranker", "graph", "agentic"],
         description="Strategies to compare",
     )
     sample_n: int = Field(0, ge=0, description="Gold queries to use (0 = all)")
-    recall_k: int = Field(5, ge=1)
-    ndcg_k: int = Field(10, ge=1)
+    recall_k: int = Field(_CONFIG.evaluation.recall_k, ge=1)
+    ndcg_k: int = Field(_CONFIG.evaluation.ndcg_k, ge=1)
     use_ragas: bool = Field(
         False,
         description="Generate LLM answers and run RAGAS metrics (faithfulness, relevancy, context precision)",

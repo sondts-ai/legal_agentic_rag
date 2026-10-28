@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import time
 from fastapi import APIRouter, HTTPException
+
+from configs import get_config
 from src.api.schemas import QueryRequest, QueryResponse, SourceDocument, TraceStep
 
 router = APIRouter()
@@ -114,7 +116,9 @@ def _agentic_retrieve(question: str, k: int):
 async def query(request: QueryRequest) -> QueryResponse:
     try:
         docs_list, latency_ms, trace = _strategy_retrieve(
-            request.strategy, request.question, request.k
+            request.strategy,
+            request.question,
+            request.k or get_config().retrieval.k,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retrieval error: {e}")

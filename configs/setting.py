@@ -88,6 +88,7 @@ class GenerationConfig:
 @dataclass(frozen=True)
 class EvaluationConfig:
     gold_set_path: Path
+    output_dir: Path
     recall_k: int
     ndcg_k: int
     query_types: tuple[str, ...]
@@ -216,6 +217,7 @@ def _build_config(raw: dict) -> Config:
     evaluation_raw = raw["evaluation"]
     evaluation = EvaluationConfig(
         gold_set_path=_resolve_path(evaluation_raw["gold_set_path"]),
+        output_dir=_resolve_path(evaluation_raw["output_dir"]),
         recall_k=int(evaluation_raw["recall_k"]),
         ndcg_k=int(evaluation_raw["ndcg_k"]),
         query_types=tuple(evaluation_raw["query_types"]),

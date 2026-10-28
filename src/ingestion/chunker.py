@@ -1,42 +1,31 @@
-from dataclasses import dataclass
+from __future__ import annotations
 
+from configs import ChunkingConfig
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-
-@dataclass
-class ChunkingConfig:
-    chunk_size: int = 1000
-    chunk_overlap: int = 100
-    separators: list[str] = None
-
-
-class Config:
-    def __init__(self):
-        self.chunking = ChunkingConfig(
-            separators=["\n\n", "\n", " ", ""]
-        )
-
-
-def build_splitter():
+def build_splitter(config: ChunkingConfig) -> RecursiveCharacterTextSplitter:
     return RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-        separators=["\nĐiều ", "\nKhoản ", "\nĐiểm ", "\n\n", "\n", " "],
+        chunk_size=config.chunk_size,
+        chunk_overlap=config.chunk_overlap,
+        separators=list(config.separators),
         keep_separator=True,
     )
 
 
-def chunk_documents(docs, config):
-    splitter = build_splitter()
+def chunk_documents(
+    docs: list[Document],
+    config: ChunkingConfig,
+) -> list[Document]:
+    splitter = build_splitter(config)
 
-    chunks = []
+    chunks: list[Document] = []
 
     for doc in docs:
         splits = splitter.split_documents([doc])
 
-        for i, chunk in enumerate(splits):
-            chunk.metadata["chunk_index"] = i
+        for index, chunk in enumerate(splits):
+            chunk.metadata["chunk_index"] = index
             chunks.append(chunk)
 
     return chunks

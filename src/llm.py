@@ -11,8 +11,8 @@ def get_llm(
     api_key: str | None = None,
     base_url: str | None = None,
     temperature: float = 0.0,
+    max_tokens: int | None = None,
 ) -> BaseChatModel:
-    
     provider = provider.lower()
 
     if provider not in _PROVIDERS:
@@ -29,6 +29,7 @@ def get_llm(
             api_key=api_key,
             base_url=base_url,
             temperature=temperature,
+            max_tokens=max_tokens,
         )
 
     if provider == "gemini":
