@@ -35,7 +35,7 @@ def check_health() -> str:
     if h.get("indexes_ready"):
         return "✅ Indexes ready — all retrieval strategies available"
     if h.get("status") == "error":
-        return f"❌ API unreachable — {h.get('detail', 'start FastAPI with: uvicorn src.api.app:app --port 8000')}"
+        return f"❌ API unreachable — {h.get('detail', 'start FastAPI with: uvicorn src.api.app:app --port 8001')}"
     return "⚠️ Indexes not ready — run: python scripts/ingest.py"
 
 

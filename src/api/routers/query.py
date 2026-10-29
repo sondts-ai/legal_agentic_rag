@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import time
 from fastapi import APIRouter, HTTPException
+from openai import APIConnectionError
 
 from configs import get_config
 from src.api.schemas import QueryRequest, QueryResponse, SourceDocument, TraceStep
@@ -25,7 +26,16 @@ def _strategy_retrieve(strategy: str, question: str, k: int) -> tuple[list[dict]
     if strategy == "naive":
         from src.retrieval.dense import dense_search
         t0 = time.perf_counter()
-        docs = dense_search(_get_store(), question, k=k)
+        try:
+            docs = dense_search(_get_store(), question, k=k)
+        except APIConnectionError as exc:
+            docs = _get_bm25().search(question, k=k)
+            trace.append(_ts(
+                "⚠️",
+                "Dense fallback",
+                f"Dense unavailable ({type(exc).__name__}); using BM25",
+                t0,
+            ))
         trace.append(_ts("🔍", "Dense search", f"{len(docs)} docs retrieved", t0))
 
     elif strategy == "hybrid":
@@ -36,17 +46,41 @@ def _strategy_retrieve(strategy: str, question: str, k: int) -> tuple[list[dict]
 
     elif strategy == "reranker":
         from src.retrieval.hybrid import hybrid_search
-        from src.retrieval.reranker import rerank
         t0 = time.perf_counter()
-        candidates = hybrid_search(_get_store(), _get_bm25(), question, k=k * 2, trace=trace)
+        candidates = hybrid_search(
+            _get_store(),
+            _get_bm25(),
+            question,
+            k=max(k * 4, 20),
+            trace=trace,
+        )
         t1 = time.perf_counter()
-        docs = rerank(question, candidates, k=k)
+        try:
+            from src.retrieval.reranker import rerank
+            docs = rerank(question, candidates, k=k)
+        except ModuleNotFoundError as exc:
+            docs = candidates[:k]
+            trace.append(_ts(
+                "⚠️",
+                "Reranker fallback",
+                f"{type(exc).__name__}; using hybrid ranking",
+                t1,
+            ))
         trace.append(_ts("📊", "CrossEncoder reranker", f"{len(candidates)} candidates → top {len(docs)} docs", t1))
 
     elif strategy == "graph":
-        from src.retrieval.graph import graph_search
         t0 = time.perf_counter()
-        docs = graph_search(_get_store(), _get_graph(), question, k=k, trace=trace)
+        try:
+            from src.retrieval.graph import graph_search
+            docs = graph_search(_get_store(), _get_graph(), question, k=k, trace=trace)
+        except (ModuleNotFoundError, APIConnectionError) as exc:
+            docs = _get_bm25().search(question, k=k)
+            trace.append(_ts(
+                "⚠️",
+                "Graph fallback",
+                f"Graph unavailable ({type(exc).__name__}); using BM25",
+                t0,
+            ))
 
     elif strategy == "agentic":
         docs, _, trace = _agentic_retrieve(question, k)
@@ -88,10 +122,19 @@ def _agentic_retrieve(question: str, k: int):
     })
 
     if intent == "multi_hop":
-        from src.retrieval.graph import graph_search
         trace.append({"icon": "➡️", "label": "Route", "detail": "graph_traverse (multi-hop relationship chain)", "latency_ms": 0.0})
         t0 = time.perf_counter()
-        docs = graph_search(_get_store(), _get_graph(), question, k=k, trace=trace)
+        try:
+            from src.retrieval.graph import graph_search
+            docs = graph_search(_get_store(), _get_graph(), question, k=k, trace=trace)
+        except (ModuleNotFoundError, APIConnectionError) as exc:
+            docs = _get_bm25().search(question, k=k)
+            trace.append(_ts(
+                "⚠️",
+                "Graph fallback",
+                f"Graph unavailable ({type(exc).__name__}); using BM25",
+                t0,
+            ))
     elif intent == "temporal":
         from src.retrieval.hybrid import hybrid_search
         trace.append({"icon": "➡️", "label": "Route", "detail": "hybrid_search (temporal filter)", "latency_ms": 0.0})
@@ -100,12 +143,27 @@ def _agentic_retrieve(question: str, k: int):
         trace[-1]["latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     else:
         from src.retrieval.hybrid import hybrid_search
-        from src.retrieval.reranker import rerank
         trace.append({"icon": "➡️", "label": "Route", "detail": "hybrid_search → reranker (factual/reasoning)", "latency_ms": 0.0})
         t0 = time.perf_counter()
-        candidates = hybrid_search(_get_store(), _get_bm25(), question, k=k * 2, trace=trace)
+        candidates = hybrid_search(
+            _get_store(),
+            _get_bm25(),
+            question,
+            k=max(k * 4, 20),
+            trace=trace,
+        )
         t1 = time.perf_counter()
-        docs = rerank(question, candidates, k=k)
+        try:
+            from src.retrieval.reranker import rerank
+            docs = rerank(question, candidates, k=k)
+        except ModuleNotFoundError as exc:
+            docs = candidates[:k]
+            trace.append(_ts(
+                "⚠️",
+                "Reranker fallback",
+                f"{type(exc).__name__}; using hybrid ranking",
+                t1,
+            ))
         trace.append(_ts("📊", "CrossEncoder reranker", f"{len(candidates)} candidates → top {len(docs)} docs", t1))
 
     latency_ms = (time.perf_counter() - t_total) * 1000

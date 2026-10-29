@@ -16,7 +16,11 @@ _running = False
 
 
 class IngestRequest(BaseModel):
-    sample: int = Field(0, ge=0, description="Docs to load (0 = full dataset)")
+    sample: int = Field(
+        get_config().dataset.sample_size or 0,
+        ge=0,
+        description="Docs to load (0 = use configured default)",
+    )
     resume: bool = Field(False, description="Skip steps whose outputs already exist")
     from_step: Literal["load", "clean", "chunk", "chroma", "bm25", "graph"] | None = Field(
         None, description="Force-restart from this step"

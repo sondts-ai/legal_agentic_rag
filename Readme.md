@@ -1,213 +1,237 @@
-# ⚖️ Legal Agentic RAG
+# Legal Agentic RAG - Demo
 
-Hệ thống **Agentic Retrieval-Augmented Generation (RAG)** chuyên sâu cho lĩnh vực pháp lý, kết hợp cơ chế Multi-Agent điều phối thông minh, tìm kiếm lai (**Hybrid Search**: Dense + Sparse BM25 + Knowledge Graph), xếp hạng lại (**Reranking**), bộ công cụ đánh giá chuẩn hóa (**Benchmark**) và giao diện người dùng trực quan với **Gradio**.
+Demo hỏi đáp và retrieval trên văn bản pháp luật Việt Nam. Hệ thống gồm:
 
-## 📌 Mục lục
+- **Dense retrieval** với `intfloat/multilingual-e5-small` qua vLLM.
+- **BM25** cho tìm kiếm từ khóa.
+- **Hybrid search**, knowledge graph và CrossEncoder reranker.
+- **Agentic routing** chọn graph/hybrid/reranker theo loại câu hỏi.
+- **FastAPI** backend, **Gradio** UI và benchmark retrieval.
 
-* [Tính năng nổi bật](#-tính-năng-nổi-bật)
-* [Kiến trúc hệ thống](#-kiến-trúc-hệ-thống)
-* [Cấu trúc thư mục](#-cấu-trúc-thư-mục)
-* [Yêu cầu hệ thống & Cài đặt](#-yêu-cầu-hệ-thống--cài-đặt)
-* [Cấu hình hệ thống](#-cấu-hình-hệ-thống)
-* [Hướng dẫn sử dụng](#-hướng-dẫn-sử-dụng)
-  * [1. Nạp và xử lý dữ liệu văn bản pháp luật](#1-nạp-và-xử-lý-dữ-liệu-văn-bản-pháp-luật)
-  * [2. Khởi chạy Backend API (FastAPI)](#2-khởi-chạy-backend-api-fastapi)
-  * [3. Khởi chạy Giao diện Gradio](#3-khởi-chạy-giao-diện-gradio)
-  * [4. Đánh giá chất lượng (Evaluation & Benchmark)](#4-đánh-giá-chất-lượng-evaluation--benchmark)
+> Đây là bản demo. Dataset mặc định trong `configs/config.yaml` chỉ dùng một
+> mẫu nhỏ để khởi động nhanh. Kết quả benchmark chỉ có ý nghĩa trong phạm vi
+> gold set và index đã được tạo cùng một phiên bản dữ liệu.
 
-## 🚀 Tính năng nổi bật
-
-* **Kiến trúc Multi-Agent thông minh:**
-  * `orchestrator.py`: Định tuyến truy vấn, phân tích câu hỏi người dùng và điều phối các agent thành phần.
-  * `rag_agent.py`: Trích xuất tài liệu ngữ cảnh, kiểm tra độ liên quan và tổng hợp câu trả lời có trích dẫn điều luật chính xác.
-  * `ingestion_agent.py`: Quản lý pipeline làm sạch, phân đoạn (chunking) theo cấu trúc điều khoản luật và xây dựng chỉ mục.
-* **Chiến lược Tìm kiếm Đa tầng (Advanced Retrieval):**
-  * **Dense Retrieval**: Tìm kiếm ngữ nghĩa dựa trên vector embedding (ChromaDB).
-  * **Sparse Retrieval**: Tìm kiếm từ khóa chính xác dựa trên BM25.
-  * **Graph Retrieval**: Khai thác liên kết tham chiếu giữa các văn bản, thông tư, nghị định và điều luật.
-  * **Hybrid Search & Reranking**: Kết hợp đa nguồn tìm kiếm và sử dụng Cross-Encoder để chấm điểm, tái sắp xếp tài liệu có độ liên quan cao nhất.
-* **Đánh giá & Benchmark toàn diện:**
-  * Xây dựng tập dữ liệu vàng (Gold Set) và đo lường các chỉ số retrieval / generation: MRR, Hit@K, Precision, Recall, Faithfulness,...
-* **Giao diện tương tác Gradio trực quan:**
-  * Giao diện thân thiện giúp hỏi đáp pháp lý theo thời gian thực, xem luồng suy luận của Agent và các trích dẫn pháp luật nguồn.
-
-## 🏗️ Kiến trúc hệ thống
+## 1. Kiến trúc và các cổng
 
 ```text
-       ┌────────────────────────┐
-       │   Gradio UI / Client   │
-       └───────────┬────────────┘
-                   │ (HTTP / REST)
-       ┌───────────▼────────────┐
-       │    FastAPI Gateway     │
-       └───────────┬────────────┘
-                   │
-       ┌───────────▼────────────┐
-       │  Orchestrator Agent    │
-       └─────┬────────────┬─────┘
-             │            │
- ┌───────────▼──┐      ┌──▼────────────┐
- │  RAG Agent   │      │Ingestion Agent│
- └───────┬──────┘      └──┬────────────┘
-         │                │
-┌────────▼────────────────▼────────────┐
-│ Retrieval & Indexing Layer           │
-│  - Dense: ChromaDB (Vector Store)    │
-│  - Sparse: BM25 Index                │
-│  - Graph: Structural References      │
-│  - Reranker: Cross-Encoder           │
-└──────────────────────────────────────┘
+Browser ──> Gradio UI :7860 ──> FastAPI :8001
+                                  ├──> Chroma :8000
+                                  ├──> vLLM embedding :8080
+                                  └──> BM25 / graph / CrossEncoder
 ```
 
-## 📂 Cấu trúc thư mục
+| Thành phần | URL mặc định | Vai trò |
+|---|---:|---|
+| Gradio | http://localhost:7860 | Giao diện demo |
+| FastAPI | http://localhost:8001 | API và Swagger |
+| Chroma | http://localhost:8000 | Vector database |
+| vLLM | http://localhost:8080/v1 | Embedding API |
 
-```text
-legal_agentic_rag/
-├── UI/
-│   ├── api_client.py        # Client kết nối FastAPI cho giao diện
-│   └── app.py               # Giao diện người dùng xây dựng bằng Gradio
-├── configs/
-│   ├── __init__.py
-│   ├── config.yaml          # File cấu hình mô hình, chunk size, tham số RAG
-│   └── setting.py           # Quản lý cấu hình bằng Pydantic / dataclass
-├── src/
-│   ├── agents/
-│   │   ├── orchestrator.py      # Điều phối toàn bộ luồng tác vụ
-│   │   ├── rag_agent.py         # Agent truy vấn và sinh phản hồi
-│   │   └── ingestion_agent.py   # Agent nạp và lập chỉ mục văn bản
-│   ├── api/
-│   │   ├── app.py               # Entrypoint FastAPI backend
-│   │   ├── schemas.py           # Định nghĩa Pydantic Request/Response
-│   │   └── routers/
-│   │       ├── query.py         # Endpoint xử lý câu hỏi pháp lý
-│   │       ├── ingest.py        # Endpoint nạp tài liệu
-│   │       └── benchmark.py     # Endpoint chạy đánh giá
-│   ├── evaluation/
-│   │   ├── benchmark.py         # Pipeline benchmark
-│   │   ├── gold_set.py          # Quản lý ground-truth / golden set
-│   │   └── metrics.py           # Tính toán các chỉ số đánh giá
-│   ├── indexing/
-│   │   ├── bm25_index.py        # Xây dựng và quản lý BM25 Index
-│   │   ├── chroma_store.py      # Quản lý Chroma Vector Database
-│   │   └── embeddings.py        # Embedding models wrapper
-│   ├── ingestion/
-│   │   ├── loader.py            # Đọc tài liệu (PDF, Word, TXT,...)
-│   │   ├── cleaner.py           # Làm sạch và tiền xử lý văn bản luật
-│   │   ├── chunker.py           # Chia đoạn theo cấu trúc chương/mục/điều
-│   │   └── progress.py          # Theo dõi tiến độ ingest
-│   ├── retrieval/
-│   │   ├── dense.py             # Dense retriever
-│   │   ├── bm25.py              # BM25 retriever
-│   │   ├── graph.py             # Knowledge Graph retriever
-│   │   ├── hybrid.py            # Kết hợp kết quả (Hybrid Search)
-│   │   └── reranker.py          # Cross-Encoder Reranker
-│   ├── tools/                   # Bộ tool tích hợp cho Agent
-│   │   ├── eval_tools.py
-│   │   ├── ingestion_tools.py
-│   │   └── retrieval_tools.py
-│   ├── scripts/                 # CLI Scripts tiện ích
-│   │   ├── ingest.py            # Script chạy nạp dữ liệu thủ công
-│   │   ├── build_eval_set.py    # Tạo tập test đánh giá
-│   │   └── run_benchmark.py     # Script chạy kiểm thử đánh giá
-│   └── llm.py                   # Client quản lý LLM (OpenAI, Gemini, v.v.)
-├── progress.json                # Lưu trạng thái tiến trình
-├── pyproject.toml               # Quản lý dependencies & packaging
-└── README.md
-```
+## 2. Yêu cầu
 
-## ⚙️ Yêu cầu hệ thống & Cài đặt
+- Docker và Docker Compose plugin.
+- NVIDIA driver, NVIDIA Container Toolkit và GPU nếu chạy vLLM/reranker bằng
+  GPU.
+- API key cho LLM sinh câu trả lời, ví dụ `OPENROUTER_API_KEY`.
+- Dữ liệu/index demo đã có trong `data/`, `chroma/` và `data/indexes/`.
 
-### Yêu cầu:
-* Python >= 3.10
-* GPU (Khuyến nghị nếu chạy embedding / reranker model local)
-
-### Các bước cài đặt:
-
-1. **Clone repository:**
-   ```bash
-   git clone https://github.com/sondts-ai/legal_agentic_rag.git
-   cd legal_agentic_rag
-   ```
-
-2. **Khởi tạo môi trường ảo:**
-   ```bash
-   python -m venv venv
-   # Trên Linux/macOS:
-   source venv/bin/activate
-   # Trên Windows:
-   venv\Scripts\activate
-   ```
-
-3. **Cài đặt thư viện dependencies:**
-   ```bash
-   pip install --upgrade pip
-   pip install -e .
-   ```
-
-## 🔧 Cấu hình hệ thống
-
-Tùy chỉnh thông số trong tệp `configs/config.yaml` và thiết lập các biến môi trường cần thiết:
+Cài dependency local nếu không dùng Docker:
 
 ```bash
-# Thiết lập API Key cho LLM
-export OPENAI_API_KEY="sk-..."
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[api,ui,ingest,dev]"
 ```
 
-Nội dung cơ bản trong `configs/config.yaml`:
-* **LLM Settings:** Model name, temperature, max tokens.
-* **Embedding Settings:** Model name, dimension, batch size.
-* **ChromaDB Path:** Đường dẫn lưu trữ vector DB cục bộ.
-* **Retrieval Weights:** Tỷ lệ phân bổ giữa Dense, BM25 và Graph Search.
+## 3. Chạy demo bằng Docker Compose
 
-## 📖 Hướng dẫn sử dụng
+Tạo file `.env` ở thư mục gốc:
 
-### 1. Nạp và xử lý dữ liệu văn bản pháp luật
-
-Để nạp tài liệu vào cơ sở dữ liệu vector và xây dựng chỉ mục BM25, chạy script ingest:
-
-```bash
-python -m src.scripts.ingest --data_dir /path/to/legal/documents
+```dotenv
+OPENROUTER_API_KEY=your-key
+LLM_MODEL=your-openrouter-model
+HF_TOKEN=
 ```
 
-Quá trình xử lý:
-1. `loader.py`: Phân tích và đọc văn bản.
-2. `cleaner.py`: Loại bỏ ký tự thừa, chuẩn hóa định dạng.
-3. `chunker.py`: Phân đoạn văn bản theo cấu trúc Điều/Khoản luật.
-4. `chroma_store.py` & `bm25_index.py`: Lưu trữ vector embeddings và lập chỉ mục BM25.
-
-### 2. Khởi chạy Backend API (FastAPI)
-
-Khởi động dịch vụ API để phục vụ các yêu cầu truy vấn:
+Khởi động toàn bộ stack:
 
 ```bash
-uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+docker compose up --build
 ```
 
-* **Swagger UI:** Truy cập `http://localhost:8000/docs` để kiểm thử trực tiếp danh sách API endpoints.
+Sau khi các container khởi động:
 
-### 3. Khởi chạy Giao diện Gradio
+- Mở UI: http://localhost:7860
+- Swagger: http://localhost:8001/docs
+- Kiểm tra API: http://localhost:8001/health
 
-Mở một terminal mới (đảm bảo Backend API đang chạy) và khởi chạy giao diện Gradio:
+Xem log riêng từng service:
 
 ```bash
+docker compose logs -f vllm
+docker compose logs -f api
+docker compose logs -f ui
+```
+
+Dừng stack:
+
+```bash
+docker compose down
+```
+
+`docker-compose.yml` dùng đúng các tham số demo hiện tại:
+
+```bash
+chroma run --host 0.0.0.0 --port 8000
+
+uvicorn src.api.app:app --host 0.0.0.0 --port 8001
+
+vllm serve intfloat/multilingual-e5-small \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --gpu-memory-utilization 0.35 \
+  --max-model-len 512 \
+  --max-num-seqs 1
+
 python UI/app.py
 ```
 
-* Ứng dụng Gradio sẽ mặc định mở tại: `http://127.0.0.1:7860`
-* Giao diện cung cấp:
-  * Khung hội thoại tra cứu tình huống pháp lý.
-  * Tùy chọn nguồn tìm kiếm và hiển thị trích dẫn trực tiếp từ các Điều luật liên quan.
+Trong container, API dùng `CHROMA_HOST=chroma` và
+`EMBEDDING_BASE_URL=http://vllm:8080/v1`; UI dùng
+`API_BASE_URL=http://api:8001`. Vì vậy không cần sửa code khi chạy Compose.
 
-### 4. Đánh giá chất lượng (Evaluation & Benchmark)
+## 4. Chạy từng service thủ công
 
-Để đo lường hiệu năng của hệ thống RAG trên tập dữ liệu kiểm thử chuẩn:
+Nếu không dùng Docker, mở bốn terminal.
+
+### Terminal 1 - Chroma
 
 ```bash
-# Tạo tập kiểm thử
-python -m src.scripts.build_eval_set
-
-# Chạy benchmark
-python -m src.scripts.run_benchmark --config configs/config.yaml
+chroma run --host 0.0.0.0 --port 8000
 ```
 
-Kết quả benchmark (MRR, Hit@K, Faithfulness, Answer Relevance,...) sẽ được hiển thị chi tiết trên console hoặc lưu vào file kết quả đánh giá.
+Khi dùng Chroma server, đặt:
+
+```bash
+export CHROMA_MODE=http
+export CHROMA_HOST=127.0.0.1
+export CHROMA_PORT=8000
+```
+
+### Terminal 2 - vLLM
+
+```bash
+vllm serve intfloat/multilingual-e5-small \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --gpu-memory-utilization 0.35 \
+  --max-model-len 512 \
+  --max-num-seqs 1
+```
+
+### Terminal 3 - FastAPI
+
+```bash
+export EMBEDDING_BASE_URL=http://127.0.0.1:8080/v1
+export RERANKER_DEVICE=cuda
+uvicorn src.api.app:app --host 0.0.0.0 --port 8001
+```
+
+### Terminal 4 - Gradio
+
+```bash
+API_BASE_URL=http://127.0.0.1:8001 python UI/app.py
+```
+
+## 5. Index và ingestion
+
+Pipeline mặc định dùng `sample_size: 200` trong config. Với bản demo, nên giữ
+nguyên index có sẵn. Nếu cần tạo lại index từ đầu:
+
+```bash
+python -m src.scripts.ingest --sample 200
+```
+
+Không dùng `--resume` khi đổi số lượng mẫu hoặc đổi dataset. Lệnh này tạo lại
+processed documents, Chroma vectors, BM25 index và graph theo cùng một lần
+ingestion.
+
+Kiểm tra index:
+
+```bash
+curl http://localhost:8001/health
+```
+
+Kết quả sẵn sàng có dạng:
+
+```json
+{"status":"ok","indexes_ready":true,"detail":null}
+```
+
+## 6. Thử query
+
+Trong UI, chọn `agentic`, `k = 5`, rồi thử:
+
+> Những văn bản nào sửa đổi, bổ sung Luật Đầu tư công và hiện còn hiệu lực?
+
+Để kiểm tra trực tiếp reranker:
+
+> Luật Đầu tư công quy định những nội dung nào về quản lý dự án đầu tư?
+
+## 7. Benchmark
+
+Chạy benchmark retrieval:
+
+```bash
+python -m src.scripts.run_benchmark --strategy all
+```
+
+Chạy một strategy:
+
+```bash
+python -m src.scripts.run_benchmark --strategy agentic --sample 3
+```
+
+Kết quả được lưu tại `results/benchmark_*.csv`.
+
+Benchmark đo `recall@K`, `ndcg@K` và latency retrieval. Lần khởi tạo model/index
+được warm-up trước khi đo; nếu bật RAGAS, latency sinh câu trả lời được ghi
+riêng ở `avg_generation_latency_ms`.
+
+### Diễn giải kết quả demo
+
+`naive` có thể cao điểm hơn `agentic` trên gold set nhỏ. Đây chưa phải bằng
+chứng naive tốt hơn trong production: agentic có thêm bước routing/reranking,
+còn gold set demo yêu cầu các chunk cụ thể và benchmark đang đánh giá top-K.
+Khi thay đổi dataset, chunking, candidate count hoặc device, cần rebuild index
+và ghi lại cấu hình để so sánh công bằng.
+
+## 8. Cấu hình quan trọng
+
+Các thiết lập chính nằm trong `configs/config.yaml` và có thể override bằng
+environment variables:
+
+| Biến | Mặc định demo | Ý nghĩa |
+|---|---|---|
+| `CHROMA_MODE` | `persistent` | `persistent` local hoặc `http` server |
+| `CHROMA_HOST` | `localhost` | Host Chroma |
+| `CHROMA_PORT` | `8000` | Port Chroma |
+| `EMBEDDING_BASE_URL` | `http://localhost:8080/v1` | vLLM OpenAI API |
+| `RERANKER_DEVICE` | `cuda` | `cuda` hoặc `cpu` |
+| `RERANKER_CANDIDATE_K` | `20` | Số candidate trước reranking |
+| `API_BASE_URL` | `http://localhost:8001` | UI gọi FastAPI |
+| `OPENROUTER_API_KEY` | - | API key sinh câu trả lời |
+| `LLM_MODEL` | - | Model generation |
+
+## 9. Xử lý lỗi nhanh
+
+- **UI báo API unreachable:** kiểm tra `docker compose ps` và
+  `docker compose logs api`.
+- **API báo indexes not ready:** kiểm tra `data/indexes/`, `chroma/` và chạy
+  ingestion nếu index chưa tồn tại.
+- **vLLM không khởi động:** kiểm tra NVIDIA Container Toolkit, VRAM và log
+  `docker compose logs vllm`.
+- **Query timeout:** chờ vLLM tải model lần đầu, sau đó restart API nếu cần;
+  UI đã cấu hình timeout query 600 giây.
+- **Reranker lỗi CUDA:** tạm thời đặt `RERANKER_DEVICE=cpu` rồi restart API.

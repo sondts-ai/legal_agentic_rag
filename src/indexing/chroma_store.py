@@ -12,15 +12,24 @@ from src.indexing.embeddings import VLLMEmbedding
 
 
 def get_store(config: Config | None = None) -> Chroma:
-    """Return a Chroma instance backed by the configured HTTP server."""
+    """Return a Chroma instance backed by the configured persistence mode."""
     app_config = config or get_config()
     chroma_config = app_config.chroma
     embedding_config = app_config.embedding
 
-    client = chromadb.HttpClient(
-        host=chroma_config.host,
-        port=chroma_config.port,
-    )
+    if chroma_config.mode == "persistent":
+        chroma_config.path.mkdir(parents=True, exist_ok=True)
+        client = chromadb.PersistentClient(path=str(chroma_config.path))
+    elif chroma_config.mode == "http":
+        client = chromadb.HttpClient(
+            host=chroma_config.host,
+            port=chroma_config.port,
+        )
+    else:
+        raise ValueError(
+            f"Unsupported Chroma mode={chroma_config.mode!r}; "
+            "expected 'persistent' or 'http'"
+        )
 
     embedding_function = VLLMEmbedding(
         api_key=app_config.hf_token,

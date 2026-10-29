@@ -4,12 +4,13 @@ from configs import RetrievalConfig
 from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
 
-_cached: dict[str, CrossEncoder] = {}
+_cached: dict[tuple[str, str], CrossEncoder] = {}
 
-def _get_model(model_name: str) -> CrossEncoder:
-    if model_name not in _cached:
-        _cached[model_name] = CrossEncoder(model_name)
-    return _cached[model_name]
+def _get_model(model_name: str, device: str) -> CrossEncoder:
+    cache_key = (model_name, device)
+    if cache_key not in _cached:
+        _cached[cache_key] = CrossEncoder(model_name, device=device)
+    return _cached[cache_key]
 
 def rerank(
     query: str,
@@ -32,7 +33,7 @@ def rerank(
     if k <= 0:
         raise ValueError("Reranker k must be greater than zero")
 
-    model = _get_model(model_name)
+    model = _get_model(model_name, config.reranker_device)
     pairs = [(query, doc.page_content) for doc in docs]
     scores = model.predict(pairs)
     ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)

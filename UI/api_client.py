@@ -4,7 +4,8 @@ import os
 
 import requests
 
-BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000").rstrip("/")
+# ChromaDB uses port 8000 in the default configuration; FastAPI runs on 8001.
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8001").rstrip("/")
 DEFAULT_TIMEOUT = 15
 
 def health()->dict:
@@ -28,7 +29,7 @@ def query(question: str, strategy: str, k: int) -> dict:
         r = requests.post(
             f"{BASE_URL}/query",
             json={"question": question, "strategy": strategy, "k": k},
-            timeout=120,
+            timeout=600,
         )
         r.raise_for_status()
         return r.json()

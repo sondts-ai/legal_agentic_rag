@@ -56,12 +56,16 @@ class RetrievalConfig:
     dense_k: int
     rrf_k: int
     reranker_model: str
+    reranker_candidate_k: int
+    reranker_device: str
     graph_max_hops: int
     graph_edge_types: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class ChromaConfig:
+    mode: Literal["persistent", "http"]
+    path: Path
     distance_metric: str
     host: str
     port: int
@@ -169,12 +173,26 @@ def _build_config(raw: dict) -> Config:
         dense_k=int(retrieval_raw["dense_k"]),
         rrf_k=int(retrieval_raw["rrf_k"]),
         reranker_model=retrieval_raw["reranker_model"],
+        reranker_candidate_k=int(
+            os.getenv(
+                "RERANKER_CANDIDATE_K",
+                retrieval_raw.get("reranker_candidate_k", 20),
+            )
+        ),
+        reranker_device=os.getenv(
+            "RERANKER_DEVICE",
+            retrieval_raw.get("reranker_device", "cpu"),
+        ),
         graph_max_hops=int(retrieval_raw["graph_max_hops"]),
         graph_edge_types=tuple(retrieval_raw["graph_edge_types"]),
     )
 
     chroma_raw = raw["chroma"]
     chroma = ChromaConfig(
+        mode=os.getenv("CHROMA_MODE", chroma_raw.get("mode", "persistent")),
+        path=_resolve_path(
+            os.getenv("CHROMA_PATH", chroma_raw.get("path", "chroma"))
+        ),
         distance_metric=chroma_raw["distance_metric"],
         host=os.getenv("CHROMA_HOST", chroma_raw["host"]),
         port=int(os.getenv("CHROMA_PORT", chroma_raw["port"])),

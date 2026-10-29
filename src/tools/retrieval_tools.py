@@ -1,20 +1,18 @@
+from __future__ import annotations
 
 from functools import lru_cache
 import json
+from typing import TYPE_CHECKING
 
 from configs import get_config
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
 from langchain_core.tools import tool
 
 from src.indexing.chroma_store import get_store
-from src.indexing.bm25_index import BM25Index
-from src.retrieval.dense import dense_search
-from src.retrieval.bm25 import bm25_search
-from src.retrieval.hybrid import hybrid_search
-from src.retrieval.reranker import rerank
-from src.retrieval.graph import load_graph, graph_search
 from src.llm import get_llm
+
+if TYPE_CHECKING:
+    from langchain_chroma import Chroma
+    from src.indexing.bm25_index import BM25Index
 
 
 @lru_cache(maxsize=1)
@@ -24,17 +22,22 @@ def _get_store() -> Chroma:
 
 @lru_cache(maxsize=1)
 def _get_bm25() -> BM25Index:
+    from src.indexing.bm25_index import BM25Index
+
     return BM25Index.load(get_config().paths.bm25_index)
 
 
 @lru_cache(maxsize=1)
 def _get_graph():
+    from src.retrieval.graph import load_graph
+
     return load_graph(get_config().paths.graph_index)
 
 
 @tool
 def dense_search_tool(query: str, k: int | None = None):
     """Search documents using dense retrieval."""
+    from src.retrieval.dense import dense_search
 
     docs = dense_search(
         store=_get_store(),
@@ -54,6 +57,7 @@ def dense_search_tool(query: str, k: int | None = None):
 @tool
 def bm25_search_tool(query: str, k: int | None = None):
     """Search documents using BM25 retrieval."""
+    from src.retrieval.bm25 import bm25_search
 
     docs = bm25_search(
         index=_get_bm25(),
@@ -79,6 +83,7 @@ def hybrid_search_tool(
     metadata_filter_json: str = "",
 ):
     """Search documents using hybrid dense and BM25 retrieval."""
+    from src.retrieval.hybrid import hybrid_search
 
     metadata_filter = (
         json.loads(metadata_filter_json)
@@ -112,6 +117,8 @@ def rerank_tool(
     k: int | None = None,
 ) -> list[dict]:
     """Rerank documents using CrossEncoder."""
+    from langchain_core.documents import Document
+    from src.retrieval.reranker import rerank
 
     documents = [
         Document(
@@ -144,6 +151,7 @@ def graph_traverse_tool(
     max_hops: int | None = None,
 ) -> list[dict]:
     """Traverse the graph to find relevant documents."""
+    from src.retrieval.graph import graph_search
 
     docs = graph_search(
         store=_get_store(),

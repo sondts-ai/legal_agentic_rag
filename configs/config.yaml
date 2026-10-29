@@ -4,7 +4,9 @@ dataset:
     metadata: "metadata"
     content: "content"
     relationships: "relationships"
-  sample_size: null
+  # Keep the default local dataset small enough for development machines.
+  # Set to null only when intentionally indexing the complete dataset.
+  sample_size: 200
 
 paths:
   data_raw: "data/raw"
@@ -39,6 +41,10 @@ retrieval:
   dense_k: 10   # candidates from dense before RRF
   rrf_k: 60     # RRF constant
   reranker_model: "BAAI/bge-reranker-v2-m3"
+  # Keep candidate count fixed across benchmark runs and vary it explicitly.
+  reranker_candidate_k: 20
+  # Use the NVIDIA GPU for CrossEncoder reranking. Override with RERANKER_DEVICE.
+  reranker_device: "cuda"
   graph_max_hops: 2
   graph_edge_types:
     - "Căn cứ"
@@ -51,6 +57,8 @@ retrieval:
     - "Văn bản quy định hết hiệu lực"
 
 chroma:
+  mode: "persistent"
+  path: "chroma"
   distance_metric: "cosine"
   host: "localhost"
   port: 8000
@@ -62,7 +70,7 @@ ingestion:
   upsert_workers: 4
 
 evaluation:
-  gold_set_path: "./data/eval/gold_set.json"
+  gold_set_path: "./data/gold_set.json"
   output_dir: "./results"
   recall_k: 5
   ndcg_k: 10

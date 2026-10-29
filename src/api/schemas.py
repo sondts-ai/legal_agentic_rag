@@ -65,3 +65,4 @@ class BenchmarkResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str = "ok"
     indexes_ready: bool
+    detail: str | None = None

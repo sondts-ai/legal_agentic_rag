@@ -54,11 +54,31 @@ def load_gold_set(path: str | Path | None = None) -> list[dict]:
     p = Path(path) if path else get_config().evaluation.gold_set_path
 
     if p.exists():
-        return json.loads(
+        data = json.loads(
             p.read_text(encoding="utf-8")
         )
+        if not isinstance(data, list):
+            raise ValueError(f"Gold set must be a JSON list: {p}")
+        return data
 
     return SAMPLE_GOLD_SET
+
+
+def validate_gold_set(entries: list[dict]) -> None:
+    """Reject malformed entries before they can produce misleading metrics."""
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"Gold entry {index} must be an object")
+        question = entry.get("question")
+        expected = entry.get("expected_doc_ids")
+        if not isinstance(question, str) or not question.strip():
+            raise ValueError(f"Gold entry {index} has no non-empty question")
+        if not isinstance(expected, list) or not expected:
+            raise ValueError(
+                f"Gold entry {index} must contain a non-empty expected_doc_ids list"
+            )
+        if any(not isinstance(doc_id, str) or not doc_id for doc_id in expected):
+            raise ValueError(f"Gold entry {index} contains an invalid document id")
 
 
 def save_gold_set(

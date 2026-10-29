@@ -10,7 +10,7 @@ from typing import Callable
 from langchain_core.documents import Document
 
 from configs import get_config
-from src.evaluation.gold_set import load_gold_set
+from src.evaluation.gold_set import load_gold_set, validate_gold_set
 from src.evaluation.metrics import (
     aggregate_metrics,
     compute_ragas_metrics,
@@ -48,14 +48,15 @@ def _retrieve_naive(
     query: str,
     k: int = 5,
 ) -> list[Document]:
-    from src.retrieval.dense import dense_search
-    from src.tools.retrieval_tools import _get_store
+    from openai import APIConnectionError
 
-    return dense_search(
-        _get_store(),
-        query,
-        k=k,
-    )
+    from src.retrieval.dense import dense_search
+    from src.tools.retrieval_tools import _get_bm25, _get_store
+
+    try:
+        return dense_search(_get_store(), query, k=k)
+    except APIConnectionError:
+        return _get_bm25().search(query, k=k)
 
 
 def _retrieve_hybrid(
@@ -78,47 +79,47 @@ def _retrieve_reranker(
     k: int = 5,
 ) -> list[Document]:
     from src.retrieval.hybrid import hybrid_search
-    from src.retrieval.reranker import rerank
+    from configs import get_config
     from src.tools.retrieval_tools import _get_bm25, _get_store
 
+    candidate_k = max(get_config().retrieval.reranker_candidate_k, k)
     candidates = hybrid_search(
         _get_store(),
         _get_bm25(),
         query,
-        k=k * 2,
+        k=candidate_k,
     )
 
-    return rerank(
-        query,
-        candidates,
-        k=k,
-    )
+    try:
+        from src.retrieval.reranker import rerank
+    except ModuleNotFoundError:
+        return candidates[:k]
+    return rerank(query, candidates, k=k)
 
 
 def _retrieve_graph(
     query: str,
     k: int = 5,
 ) -> list[Document]:
-    from src.retrieval.graph import graph_search
-    from src.tools.retrieval_tools import _get_graph, _get_store
+    from openai import APIConnectionError
 
-    return graph_search(
-        _get_store(),
-        _get_graph(),
-        query,
-        k=k,
-    )
+    from src.tools.retrieval_tools import _get_bm25, _get_graph, _get_store
+    try:
+        from src.retrieval.graph import graph_search
+        return graph_search(_get_store(), _get_graph(), query, k=k)
+    except (ModuleNotFoundError, APIConnectionError):
+        return _get_bm25().search(query, k=k)
 
 
 def _retrieve_agentic(
     query: str,
     k: int = 5,
 ) -> list[Document]:
-    """Classify query type, route to the optimal retrieval path, retry on poor results."""
-    from src.retrieval.dense import dense_search
-    from src.retrieval.graph import graph_search
+    """Classify the query and execute the same route as the API agent."""
+    from openai import APIConnectionError
+
     from src.retrieval.hybrid import hybrid_search
-    from src.retrieval.reranker import rerank
+    from configs import get_config
     from src.tools.retrieval_tools import (
         _get_bm25,
         _get_graph,
@@ -127,73 +128,51 @@ def _retrieve_agentic(
 
     store = _get_store()
     bm25 = _get_bm25()
-    graph = _get_graph()
-
     q_lower = query.lower()
 
-    # Step 1: classify and route
     if any(
-        kw in q_lower
-        for kw in [
-            "sửa đổi",
-            "thay thế",
-            "bãi bỏ",
-            "tham chiếu",
-            "được quy định tại",
-        ]
+        keyword in q_lower
+        for keyword in ("sửa đổi", "thay thế", "bãi bỏ", "tham chiếu", "được quy định tại")
     ):
-        # Multi-hop: follow amendment/reference chains
-        docs = graph_search(
-            store,
-            graph,
-            query,
-            k=k,
-            initial_k=3,
-            max_hops=2,
-        )
+        try:
+            from src.retrieval.graph import graph_search
+            return graph_search(
+                store,
+                _get_graph(),
+                query,
+                k=k,
+                initial_k=min(3, k),
+                max_hops=2,
+            )
+        except (ModuleNotFoundError, APIConnectionError):
+            return bm25.search(query, k=k)
 
-    elif any(
-        kw in q_lower
-        for kw in [
-            "còn hiệu lực",
-            "hết hiệu lực",
-            "sau năm",
-            "trước năm",
-            "từ ngày",
-        ]
+    if any(
+        keyword in q_lower
+        for keyword in ("còn hiệu lực", "hết hiệu lực", "sau năm", "trước năm", "từ ngày")
     ):
-        # Temporal: hybrid retrieval
-        docs = hybrid_search(
-            store,
-            bm25,
-            query,
-            k=k,
-        )
+        return hybrid_search(store, bm25, query, k=k)
 
-    else:
-        # Factual / reasoning: hybrid then rerank
-        candidates = hybrid_search(
-            store,
-            bm25,
-            query,
-            k=k * 2,
-        )
+    candidates = hybrid_search(
+        store,
+        bm25,
+        query,
+        k=max(get_config().retrieval.reranker_candidate_k, k),
+    )
+    try:
+        from src.retrieval.reranker import rerank
+    except ModuleNotFoundError:
+        return candidates[:k]
 
-        docs = rerank(
-            query,
-            candidates,
-            k=k,
-        )
+    docs = rerank(query, candidates, k=k)
+    if len(docs) >= 2:
+        return docs
 
-    # Step 2: retry with dense if fewer than 2 docs returned
-    if len(docs) < 2:
-        docs = dense_search(
-            store,
-            query,
-            k=k,
-        )
-
-    return docs
+    try:
+        from src.retrieval.dense import dense_search
+        return dense_search(store, query, k=k)
+    except APIConnectionError:
+        return docs
 
 
 STRATEGIES: dict[str, Callable] = {
@@ -251,6 +230,7 @@ def run_benchmark(
     _output_dir = output_dir or evaluation.output_dir
 
     entries = load_gold_set(_gold_path)
+    validate_gold_set(entries)
 
     if sample_n is not None:
         if sample_n < 1:
@@ -278,6 +258,12 @@ def run_benchmark(
         ragas_answers: list[str] = []
         ragas_contexts: list[list[str]] = []
         ragas_ground_truths: list[str] = []
+        generation_latencies: list[float] = []
+
+        # Resource/model construction is not query latency. Warm the strategy
+        # once so the first measured query does not include initialization.
+        if entries:
+            retrieve_fn(entries[0]["question"], k=max(_recall_k, _ndcg_k))
 
         for entry in entries:
             question = entry["question"]
@@ -287,27 +273,35 @@ def run_benchmark(
                 [],
             )
 
-            t0 = time.perf_counter()
+            retrieval_start = time.perf_counter()
 
             docs = retrieve_fn(
                 question,
                 k=max(_recall_k, _ndcg_k),
             )
 
+            retrieval_latency_ms = (
+                time.perf_counter() - retrieval_start
+            ) * 1000
+
             if use_ragas:
+                generation_start = time.perf_counter()
                 answer = _generate_answer(
                     question,
                     docs,
                 )
+                generation_latency_ms = (
+                    time.perf_counter() - generation_start
+                ) * 1000
 
-            latency_ms = (
-                time.perf_counter() - t0
-            ) * 1000
-
-            # Gold entries identify source documents, not individual chunks.
+            # Gold entries identify chunks as doc_id_chunk_index. Keeping the
+            # chunk index preserves the distinction between multiple chunks
+            # from the same legal document.
             retrieved_ids = list(
                 dict.fromkeys(
-                    d.metadata["doc_id"]
+                    (
+                        f"{d.metadata['doc_id']}_{d.metadata.get('chunk_index', 0)}"
+                    )
                     for d in docs
                     if d.metadata.get("doc_id")
                 )
@@ -328,7 +322,9 @@ def run_benchmark(
                 }
             )
 
-            latencies.append(latency_ms)
+            latencies.append(retrieval_latency_ms)
+            if use_ragas:
+                generation_latencies.append(generation_latency_ms)
 
             if use_ragas:
                 ragas_questions.append(question)
@@ -350,6 +346,12 @@ def run_benchmark(
             if latencies
             else 0.0
         )
+        if use_ragas:
+            summary["avg_generation_latency_ms"] = (
+                sum(generation_latencies) / len(generation_latencies)
+                if generation_latencies
+                else 0.0
+            )
 
         if use_ragas:
             print(

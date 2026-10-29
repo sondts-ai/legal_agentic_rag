@@ -12,9 +12,13 @@ from src.api.routers import benchmark, ingest, query
 from src.api.schemas import HealthResponse
 
 
+_retrieval_error: str | None = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize resources when the API starts."""
+    global _retrieval_error
 
     # Warm up retrieval resources
     try:
@@ -27,20 +31,31 @@ async def lifespan(app: FastAPI):
         _get_store()
         _get_bm25()
         _get_graph()
+        _retrieval_error = None
 
     except Exception as e:
-        print(f"Warning: failed to warm up retrieval resources: {e}")
+        _retrieval_error = str(e)
+        print(f"Warning: failed to warm up retrieval resources: {_retrieval_error}")
 
     yield
 
 
 def _indexes_ready() -> bool:
     config = get_config()
-    return (
+    if not (
         config.paths.bm25_index.exists()
         and config.paths.graph_index.exists()
         and config.paths.chroma_progress.exists()
-    )
+    ):
+        return False
+
+    try:
+        from src.tools.retrieval_tools import _get_store
+
+        store = _get_store()
+        return store._collection.count() > 0
+    except Exception:
+        return False
 
 
 def create_app() -> FastAPI:
@@ -65,9 +80,14 @@ def create_app() -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse)
     async def health():
+        indexes_ready = _indexes_ready()
+        detail = _retrieval_error
+        if not indexes_ready and detail is None:
+            detail = "Indexes are not ready — run the ingestion pipeline."
         return HealthResponse(
-            status="ok",
-            indexes_ready=_indexes_ready(),
+            status="ok" if indexes_ready and detail is None else "degraded",
+            indexes_ready=indexes_ready and detail is None,
+            detail=detail,
         )
 
     return app

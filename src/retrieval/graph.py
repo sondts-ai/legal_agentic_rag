@@ -12,6 +12,13 @@ from src.retrieval.dense import dense_search
 
 
 _EDGE_TYPES = {
+    "Căn cứ",
+    "Dẫn chiếu",
+    "Sửa đổi, bổ sung",
+    "Thay thế",
+    "Bãi bỏ",
+    "Văn bản hết hiệu lực",
+    "Văn bản quy định hết hiệu lực 1 phần",
     "Văn bản căn cứ",
     "Văn bản dẫn chiếu",
     "Văn bản sửa đổi",
@@ -72,7 +79,7 @@ def graph_search(
     k = config.k if k is None else k
     initial_k = min(k, config.dense_k) if initial_k is None else initial_k
     max_hops = config.graph_max_hops if max_hops is None else max_hops
-    allowed = edge_types or set(config.graph_edge_types)
+    allowed = edge_types or (set(config.graph_edge_types) | _EDGE_TYPES)
 
     if k <= 0 or initial_k <= 0:
         raise ValueError("Graph retrieval k values must be greater than zero")

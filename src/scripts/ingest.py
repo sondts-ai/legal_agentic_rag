@@ -212,9 +212,6 @@ def step_chunk(resume: bool, sample_size: int | None) -> None:
         config=_CONFIG.chunking,
     )
 
-    if sample_size:
-        chunks = chunks[:sample_size]
-
     out_path.write_text(
         json.dumps(
             [
@@ -279,6 +276,14 @@ def step_chroma(resume: bool, segment_size: int | None) -> None:
             progress_path.read_text(encoding="utf-8")
         )
 
+        previous_total = prog.get("total")
+        if previous_total is not None and previous_total != total:
+            raise ValueError(
+                "Chroma progress does not match chunks.json "
+                f"(progress total={previous_total}, current total={total}); "
+                "rerun without --resume or restart from the chroma step"
+            )
+
         start_offset = prog.get(
             "last_offset",
             0,
@@ -302,6 +307,11 @@ def step_chroma(resume: bool, segment_size: int | None) -> None:
         )
 
     else:
+        # A fresh pipeline may use a smaller sample than a previous run.
+        # Remove stale vectors so the Chroma collection matches chunks.json.
+        store = get_store(_CONFIG)
+        store._client.delete_collection(_CONFIG.chroma.collection_name)
+        store = get_store(_CONFIG)
         progress_path.parent.mkdir(
             parents=True,
             exist_ok=True,
@@ -484,6 +494,15 @@ def run_pipeline(
 
     from src.ingestion import progress as p
 
+    # Apply the configured development sample when the caller does not
+    # explicitly choose a size. This prevents a default run from loading the
+    # complete dataset.
+    sample_size = (
+        sample_size
+        if sample_size is not None
+        else _CONFIG.dataset.sample_size
+    )
+
     if from_step is not None:
         if from_step not in STEPS:
             raise ValueError(
@@ -565,8 +584,11 @@ def main() -> None:
     parser.add_argument(
         "--sample",
         type=int,
-        default=0,
-        help="Number of docs to load (0 = full dataset)",
+        default=_CONFIG.dataset.sample_size or 0,
+        help=(
+            "Number of docs to load "
+            f"(default: {_CONFIG.dataset.sample_size or 'full'}; 0 = full dataset)"
+        ),
     )
 
     parser.add_argument(
@@ -595,6 +617,11 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.sample < 0:
+        parser.error("--sample must be >= 0")
+    if args.segment_size is not None and args.segment_size < 100:
+        parser.error("--segment-size must be >= 100")
 
     run_pipeline(
         sample_size=(
